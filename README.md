@@ -1,6 +1,5 @@
-# marlgrid
-Gridworld for MARL experiments.
-Based on [MiniGrid](https://github.com/maximecb/gym-minigrid)
+# MarlGrid
+Gridworld for MARL experiments, based on [MiniGrid](https://github.com/maximecb/gym-minigrid).
 
 ## Training multiple independent learners
 
