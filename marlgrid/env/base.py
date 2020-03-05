@@ -1,305 +1,21 @@
-'''
-Multi-agent gridworld.
-Largely a refactor of gym_minigrid.minigrid.
-'''
+# Multi-agent gridworld.
+# Based on MiniGrid: https://github.com/maximecb/gym-minigrid.
+
 
 import gym
 import numpy as np
 import gym_minigrid
-from gym_minigrid.rendering import *
 from enum import IntEnum
 import math
+
+from .objects import Wall, Goal, Lava
+from .agents import InteractiveAgent
+from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
+
+
 TILE_PIXELS = 32
 
 
-# Map of color names to RGB values
-COLORS = {
-    'red'   : np.array([255, 0, 0]),
-    'green' : np.array([0, 255, 0]),
-    'blue'  : np.array([0, 0, 255]),
-    'purple': np.array([112, 39, 195]),
-    'yellow': np.array([255, 255, 0]),
-    'grey'  : np.array([100, 100, 100]),
-    'worst' : np.array([74, 65, 42]), # https://en.wikipedia.org/wiki/Pantone_448_C
-}
-# Used to map colors to integers
-COLOR_TO_IDX = dict({v:k for k,v in enumerate(COLORS.keys())})
-
-OBJECT_TYPE_REGISTRY = []
-
-class MetaRegistry(type):
-    def __new__(meta, name, bases, class_dict):
-        cls = type.__new__(meta, name, bases, class_dict)
-        if name not in OBJECT_TYPE_REGISTRY:
-            OBJECT_TYPE_REGISTRY.append(cls)
-        def get_recursive_subclasses(x):
-            return OBJECT_TYPE_REGISTRY
-        cls.recursive_subclasses = get_recursive_subclasses
-        return cls
-
-class WorldObj(metaclass=MetaRegistry):
-    def __init__(self,  color='worst', state=0):
-        self.color = color
-        self.state = state
-        self.contains = None
-        
-        self.agent = None # Some objects can have agents on top (e.g. floor, open doors, etc).
-
-        self.pos_init = None
-        self.pos = None
-
-    @property
-    def dir(self):
-        return None
-
-    @property
-    def type(self):
-        return self.__class__.__name__
-
-    def can_overlap(self):
-        return False
-
-    def can_pickup(self):
-        return False
-
-    def can_contain(self):
-        return False
-
-    def see_behind(self):
-        return True
-
-    def toggle(self, env, pos):
-        return False
-
-    def encode(self, str_class = False):
-        if self.agent is not None:
-            return self.agent.encode(str_class=str_class)
-        else:
-            if str_class:
-                return (self.type, self.color, self.state)
-            else:
-                # return (WorldObj.__subclasses__().index(self.__class__), self.color, self.state)
-                return (
-                    self.recursive_subclasses().index(self.__class__), 
-                    self.color if isinstance(self.color, int) else COLOR_TO_IDX[self.color],
-                    self.state)
-
-    def describe(self):
-        return f'Obj: {self.type}({self.color}, {self.state})'
-
-    @classmethod
-    def decode(cls, type, color, state):
-        if isinstance(type, str):
-            cls_subclasses = {c.__name__: c for c in cls.__subclasses__()}
-            if type not in cls_subclasses:
-                raise ValueError(f"Not sure how to construct a {cls} of (sub)type {type}")
-            return cls_subclasses[type](color, state)
-        elif isinstance(type, int):
-            subclass = cls.__subclasses__()[type]
-            return subclass(color, state)
-
-    
-    def render(self, img):
-        raise NotImplementedError
-
-    def str_render(self, dir=0):
-        return '??'
-
-class BulkObj(WorldObj):
-    def __hash__(self):
-        return hash((self.__class__, self.color, self.state, self.agent))
-    def __eq__(self, other):
-        return hash(self)==hash(other)
-
-class Goal(WorldObj):
-    def __init__(self, reward, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.reward = reward
-
-    def can_overlap(self):
-        return True
-
-    def str_render(self, dir=0):
-        return 'GG'
-
-    def render(self, img):
-        fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
-
-class Agent(WorldObj):
-    @property
-    def dir(self):
-        return self.state%4
-
-    @dir.setter
-    def dir(self, dir):
-        self.state = self.state // 4 + dir%4
-
-    def str_render(self, dir=0):
-        return ['>>','VV','<<','^^'][(self.dir+dir)%4]
-
-    @property
-    def active(self):
-        return False
-
-    def render(self, img):
-        tri_fn = point_in_triangle(
-            (0.12, 0.19),
-            (0.87, 0.50),
-            (0.12, 0.81),
-        )
-
-        # Rotate the agent based on its direction
-        tri_fn = rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5*math.pi*(self.dir))
-        fill_coords(img, tri_fn, COLORS[self.color])
-    
-class Floor(WorldObj):
-    def can_overlap(self):
-        return True and self.agent is None
-    def str_render(self, dir=0):
-        return 'FF'    
-    def render(self, img):
-        # Give the floor a pale color
-        c = COLORS[self.color]
-        r.setLineColor(100, 100, 100, 0)
-        r.setColor(*c/2)
-        r.drawPolygon([
-            (1          , TILE_PIXELS),
-            (TILE_PIXELS, TILE_PIXELS),
-            (TILE_PIXELS,           1),
-            (1          ,           1)
-        ])
-
-class EmptySpace(WorldObj):
-    def can_verlap(self):
-        return True
-    def str_render(self, dir=0):
-        return '  '
-
-class Lava(WorldObj):
-    def can_overlap(self):
-        return True and self.agent is None
-    def str_render(self, dir=0):
-        return 'VV'
-    def render(self, img):
-        c = (255, 128, 0)
-
-        # Background color
-        fill_coords(img, point_in_rect(0, 1, 0, 1), c)
-
-        # Little waves
-        for i in range(3):
-            ylo = 0.3 + 0.2 * i
-            yhi = 0.4 + 0.2 * i
-            fill_coords(img, point_in_line(0.1, ylo, 0.3, yhi, r=0.03), (0,0,0))
-            fill_coords(img, point_in_line(0.3, yhi, 0.5, ylo, r=0.03), (0,0,0))
-            fill_coords(img, point_in_line(0.5, ylo, 0.7, yhi, r=0.03), (0,0,0))
-            fill_coords(img, point_in_line(0.7, yhi, 0.9, ylo, r=0.03), (0,0,0))
-        
-    
-
-class Wall(BulkObj):
-    def see_behind(self):
-        return False
-    def str_render(self, dir=0):
-        return 'WW'
-    def render(self, img):
-        fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
-
-class Key(WorldObj):
-    def can_pickup(self):
-        return True
-    def str_render(self, dir=0):
-        return 'KK'
-    def render(self, img):
-        c = COLORS[self.color]
-
-        # Vertical quad
-        fill_coords(img, point_in_rect(0.50, 0.63, 0.31, 0.88), c)
-
-        # Teeth
-        fill_coords(img, point_in_rect(0.38, 0.50, 0.59, 0.66), c)
-        fill_coords(img, point_in_rect(0.38, 0.50, 0.81, 0.88), c)
-
-        # Ring
-        fill_coords(img, point_in_circle(cx=0.56, cy=0.28, r=0.190), c)
-        fill_coords(img, point_in_circle(cx=0.56, cy=0.28, r=0.064), (0,0,0))
-
-class Ball(WorldObj):
-    def can_pickup(self):
-        return True
-    def str_render(self, dir=0):
-        return 'AA'
-
-    def render(self, img):
-        fill_coords(img, point_in_circle(0.5, 0.5, 0.31), COLORS[self.color])
-
-class Door(WorldObj):
-    states = IntEnum('door_state','open closed locked')
-    def can_overlap(self):
-        return self.state == self.states.open  and self.agent is None # is open
-    def see_behind(self):
-        return self.state == self.states.open # is open
-    def toggle(self, agent, pos):
-        if self.state == self.states.locked: # is locked
-            # If the agent is carrying a key of matching color
-            if agent.carrying is not None and isinstance(agent.carrying, Key) and agent.carrying.color == self.color:
-                self.state = self.states.closed
-        elif self.state == self.states.closed: # is unlocked but closed
-            self.state = self.states.open
-        elif self.state == self.states.open: # is open
-            self.state = self.states.closed
-        return True    
-
-
-    def render(self, img):
-        c = COLORS[self.color]
-
-        if self.state==self.states.open:
-            fill_coords(img, point_in_rect(0.88, 1.00, 0.00, 1.00), c)
-            fill_coords(img, point_in_rect(0.92, 0.96, 0.04, 0.96), (0,0,0))
-            return
-
-        # Door frame and door
-        if self.state==self.states.locked:
-            fill_coords(img, point_in_rect(0.00, 1.00, 0.00, 1.00), c)
-            fill_coords(img, point_in_rect(0.06, 0.94, 0.06, 0.94), 0.45 * np.array(c))
-
-            # Draw key slot
-            fill_coords(img, point_in_rect(0.52, 0.75, 0.50, 0.56), c)
-        else:
-            fill_coords(img, point_in_rect(0.00, 1.00, 0.00, 1.00), c)
-            fill_coords(img, point_in_rect(0.04, 0.96, 0.04, 0.96), (0,0,0))
-            fill_coords(img, point_in_rect(0.08, 0.92, 0.08, 0.92), c)
-            fill_coords(img, point_in_rect(0.12, 0.88, 0.12, 0.88), (0,0,0))
-
-            # Draw door handle
-            fill_coords(img, point_in_circle(cx=0.75, cy=0.50, r=0.08), c) 
-
-    
-class Box(WorldObj):
-    def __init__(self, color=0, state=0, contains=None):
-        super().__init__(color, state)
-        self.contains = contains
-
-    def can_pickup(self):
-        return True
-
-    def toggle(self):
-        raise NotImplementedError
-
-    def str_render(self, dir=0):
-        return 'BB'
-
-    def render(self, img):
-        c = COLORS[self.color]
-
-        # Outline
-        fill_coords(img, point_in_rect(0.12, 0.88, 0.12, 0.88), c)
-        fill_coords(img, point_in_rect(0.18, 0.82, 0.18, 0.82), (0,0,0))
-
-        # Horizontal slit
-        fill_coords(img, point_in_rect(0.16, 0.84, 0.47, 0.53), c)
-    
 class ObjectRegistry:
     def __init__(self, objs=[], max_num_objects = 1000):
         self.key_to_obj_map = {}
@@ -409,11 +125,11 @@ class MultiGrid:
         for j in range(0, length):
             self.set(x, y + j, obj_type())
 
-    def wall_rect(self, x, y, w, h):
-        self.horz_wall(x, y, w)
-        self.horz_wall(x, y+h-1, w)
-        self.vert_wall(x, y, h)
-        self.vert_wall(x+w-1, y, h)
+    def wall_rect(self, x, y, w, h, obj_type=Wall):
+        self.horz_wall(x, y, w, obj_type=obj_type)
+        self.horz_wall(x, y+h-1, w, obj_type=obj_type)
+        self.vert_wall(x, y, h, obj_type=obj_type)
+        self.vert_wall(x+w-1, y, h, obj_type=obj_type)
 
     def __str__(self):
         render = lambda x: '  ' if x is None or not hasattr(x, 'str_render') else x.str_render(dir=self.orientation)
@@ -551,160 +267,6 @@ class MultiGrid:
                 img[ymin:ymax, xmin:xmax, :] =  np.rot90(tile_img, -self.orientation)
 
         return img
-
-
-class GridAgent(Agent):
-    class Actions(IntEnum):
-        # Turn left, turn right, move forward
-        left = 0
-        right = 1
-        forward = 2
-
-        # Pick up an object
-        pickup = 3
-        # Drop an object
-        drop = 4
-        # Toggle/activate an object
-        toggle = 5
-
-        # Done completing task
-        done = 6
-
-    def __init__(self, view_size, view_tile_size=7, actions=None, **kwargs):
-        super().__init__(**{'color':'red', **kwargs})
-        if actions is None:
-            actions = GridAgent.Actions
-
-        self.actions = actions
-        self.view_size = view_size
-        self.view_tile_size = view_tile_size
-
-
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(view_tile_size*view_size, view_tile_size*view_size, 3), dtype='uint8')
-
-        self.action_space = gym.spaces.Discrete(len(self.actions))
-        self.done = True
-
-        self.reset()
-
-    def reset(self):
-        self.done = False
-        self.pos = None
-        self.dir = 0
-        self.carrying = None
-        self.mission = ''
-
-    def render(self, img):
-        if not self.done:
-            super().render(img)
-
-    @property
-    def active(self):
-        return not self.done
-
-    @property
-    def dir_vec(self):
-        """
-        Get the direction vector for the agent, pointing in the direction
-        of forward movement.
-        """
-        # print(f"DIR IS {self.dir}")
-        assert self.dir >= 0 and self.dir < 4
-        return np.array([[1,0],[0,1],[-1,0],[0,-1]])[self.dir]
-    
-    @property
-    def right_vec(self):
-        """
-        Get the vector pointing to the right of the agent.
-        """
-        dx, dy = self.dir_vec
-        return np.array((-dy, dx))
-
-    @property
-    def front_pos(self):
-        """
-        Get the position of the cell that is right in front of the agent
-        """
-        return np.add(self.pos, self.dir_vec)
-
-    def get_view_coords(self, i, j):
-        """
-        Translate and rotate absolute grid coordinates (i, j) into the
-        agent's partially observable view (sub-grid). Note that the resulting
-        coordinates may be negative or outside of the agent's view size.
-        """
-
-        ax, ay = self.pos
-        dx, dy = self.dir_vec
-        rx, ry = self.right_vec
-
-        # Compute the absolute coordinates of the top-left view corner
-        sz = self.view_size
-        hs = self.view_size // 2
-        tx = ax + (dx * (sz-1)) - (rx * hs)
-        ty = ay + (dy * (sz-1)) - (ry * hs)
-
-        lx = i - tx
-        ly = j - ty
-
-        # Project the coordinates of the object relative to the top-left
-        # corner onto the agent's own coordinate system
-        vx = (rx*lx + ry*ly)
-        vy = -(dx*lx + dy*ly)
-
-        return vx, vy
-
-    def get_view_exts(self):
-        """
-        Get the extents of the square set of tiles visible to the agent
-        Note: the bottom extent indices are not included in the set
-        """
-        dir = self.dir
-        # Facing right
-        if dir == 0: # 1
-            topX = self.pos[0]
-            topY = self.pos[1] - self.view_size // 2
-        # Facing down
-        elif dir == 1: # 0
-            topX = self.pos[0] - self.view_size // 2
-            topY = self.pos[1]
-        # Facing left
-        elif dir == 2: # 3
-            topX = self.pos[0] - self.view_size + 1
-            topY = self.pos[1] - self.view_size // 2
-        # Facing up
-        elif dir == 3: # 2
-            topX = self.pos[0] - self.view_size // 2
-            topY = self.pos[1] - self.view_size + 1
-        else:
-            assert False, "invalid agent direction"
-
-        botX = topX + self.view_size
-        botY = topY + self.view_size
-
-        return (topX, topY, botX, botY)
-
-    def relative_coords(self, x, y):
-        """
-        Check if a grid position belongs to the agent's field of view, and returns the corresponding coordinates
-        """
-
-        vx, vy = self.get_view_coords(x, y)
-
-        if vx < 0 or vy < 0 or vx >= self.view_size or vy >= self.view_size:
-            return None
-
-        return vx, vy
-
-    def in_view(self, x, y):
-        """
-        check if a grid position is visible to the agent
-        """
-
-        return self.relative_coords(x, y) is not None
-
-    def sees(self, x, y):
-        raise NotImplementedError
 
 
 class MultiGridEnv:
@@ -851,15 +413,15 @@ class MultiGridEnv:
                 fwd_cell = self.grid.get(*fwd_pos)
 
                 # Rotate left
-                if action == GridAgent.Actions.left:
+                if action == agent.actions.left:
                     agent.dir = (agent.dir - 1)%4
 
                 # Rotate right
-                elif action == GridAgent.Actions.right:
+                elif action == agent.actions.right:
                     agent.dir = (agent.dir + 1)%4
 
                 # Move forward
-                elif action == GridAgent.Actions.forward:
+                elif action == agent.actions.forward:
                     # Under these conditions, the agent can move forward.
                     if (fwd_cell is None) or fwd_cell.can_overlap():
 
@@ -871,12 +433,10 @@ class MultiGridEnv:
                         elif fwd_cell.can_overlap():
                             fwd_cell.agent = agent
 
-                        
-                        if not isinstance(cur_cell, GridAgent): 
-                            cur_cell.agent = None
-                        else:
+                        if cur_cell == agent:
                             self.grid.set(*cur_pos, None)
-
+                        else:
+                            cur_cell.agent = None
                     else:
                         wasted = True
 
@@ -890,7 +450,7 @@ class MultiGridEnv:
                         agent.done = True
 
                 # Pick up an object
-                elif action == GridAgent.Actions.pickup:
+                elif action == agent.actions.pickup:
                     if fwd_cell and fwd_cell.can_pickup():
                         if agent.carrying is None:
                             agent.carrying = fwd_cell
@@ -900,7 +460,7 @@ class MultiGridEnv:
                         wasted = True
 
                 # Drop an object
-                elif action == GridAgent.Actions.drop:
+                elif action == agent.actions.drop:
                     if not fwd_cell and agent.carrying:
                         self.grid.set(*fwd_pos, agent.carrying)
                         agent.carrying.cur_pos = fwd_pos
@@ -910,7 +470,7 @@ class MultiGridEnv:
 
 
                 # Toggle/activate an object
-                elif action == GridAgent.Actions.toggle:
+                elif action == agent.actions.toggle:
                     if fwd_cell:
                         wasted = bool(fwd_cell.toggle(agent, fwd_pos))
                     else:
@@ -918,7 +478,7 @@ class MultiGridEnv:
                     
 
                 # Done action (not used by default)
-                elif action == GridAgent.Actions.done:
+                elif action == agent.actions.done:
                     # dones[agent_no] = True
                     wasted = True
 

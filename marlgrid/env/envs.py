@@ -1,11 +1,8 @@
 from .base import (
     MultiGridEnv,
-    MultiGrid,
-    Goal,
-    Wall,
-    Door,
-    Key
+    MultiGrid
 )
+from .objects import *
 
 class EmptyMultiGrid(MultiGridEnv):
     mission='get to the green square'

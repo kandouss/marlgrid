@@ -44,7 +44,6 @@ def render_frames(X, path, ext='png'):
         path = os.path.splitext(path)[0]
     if not os.path.isdir(path):
         os.makedirs(path)
-    print("Saving frame images in directory {path}.")
     
     for k, frame in tqdm.tqdm(enumerate(X), total=len(X)):
         Image.fromarray(frame, 'RGB').save(os.path.join(path, f'frame_{k}.{ext}'))
