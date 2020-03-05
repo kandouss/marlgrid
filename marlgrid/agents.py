@@ -8,16 +8,16 @@ from .objects import Agent
 
 class InteractiveAgent(Agent):
     class DefaultActions(IntEnum):
-        left = 0 # Rotate left
-        right = 1 # Rotate right
-        forward = 2 # Move forward
-        pickup = 3 # Pick up an object
-        drop = 4 # Drop an object
-        toggle = 5 # Toggle/activate an object
-        done = 6 # Done completing task
+        left = 0  # Rotate left
+        right = 1  # Rotate right
+        forward = 2  # Move forward
+        pickup = 3  # Pick up an object
+        drop = 4  # Drop an object
+        toggle = 5  # Toggle/activate an object
+        done = 6  # Done completing task
 
     def __init__(self, view_size, view_tile_size=7, actions=None, **kwargs):
-        super().__init__(**{'color':'red', **kwargs})
+        super().__init__(**{"color": "red", **kwargs})
         if actions is None:
             actions = self.DefaultActions
 
@@ -25,8 +25,12 @@ class InteractiveAgent(Agent):
         self.view_size = view_size
         self.view_tile_size = view_tile_size
 
-
-        self.observation_space = gym.spaces.Box(low=0, high=255, shape=(view_tile_size*view_size, view_tile_size*view_size, 3), dtype='uint8')
+        self.observation_space = gym.spaces.Box(
+            low=0,
+            high=255,
+            shape=(view_tile_size * view_size, view_tile_size * view_size, 3),
+            dtype="uint8",
+        )
 
         self.action_space = gym.spaces.Discrete(len(self.actions))
         self.done = True
@@ -38,7 +42,7 @@ class InteractiveAgent(Agent):
         self.pos = None
         self.dir = 0
         self.carrying = None
-        self.mission = ''
+        self.mission = ""
 
     def render(self, img):
         if not self.done:
@@ -56,8 +60,8 @@ class InteractiveAgent(Agent):
         """
         # print(f"DIR IS {self.dir}")
         assert self.dir >= 0 and self.dir < 4
-        return np.array([[1,0],[0,1],[-1,0],[0,-1]])[self.dir]
-    
+        return np.array([[1, 0], [0, 1], [-1, 0], [0, -1]])[self.dir]
+
     @property
     def right_vec(self):
         """
@@ -87,16 +91,16 @@ class InteractiveAgent(Agent):
         # Compute the absolute coordinates of the top-left view corner
         sz = self.view_size
         hs = self.view_size // 2
-        tx = ax + (dx * (sz-1)) - (rx * hs)
-        ty = ay + (dy * (sz-1)) - (ry * hs)
+        tx = ax + (dx * (sz - 1)) - (rx * hs)
+        ty = ay + (dy * (sz - 1)) - (ry * hs)
 
         lx = i - tx
         ly = j - ty
 
         # Project the coordinates of the object relative to the top-left
         # corner onto the agent's own coordinate system
-        vx = (rx*lx + ry*ly)
-        vy = -(dx*lx + dy*ly)
+        vx = rx * lx + ry * ly
+        vy = -(dx * lx + dy * ly)
 
         return vx, vy
 
@@ -107,19 +111,19 @@ class InteractiveAgent(Agent):
         """
         dir = self.dir
         # Facing right
-        if dir == 0: # 1
+        if dir == 0:  # 1
             topX = self.pos[0]
             topY = self.pos[1] - self.view_size // 2
         # Facing down
-        elif dir == 1: # 0
+        elif dir == 1:  # 0
             topX = self.pos[0] - self.view_size // 2
             topY = self.pos[1]
         # Facing left
-        elif dir == 2: # 3
+        elif dir == 2:  # 3
             topX = self.pos[0] - self.view_size + 1
             topY = self.pos[1] - self.view_size // 2
         # Facing up
-        elif dir == 3: # 2
+        elif dir == 3:  # 2
             topX = self.pos[0] - self.view_size // 2
             topY = self.pos[1] - self.view_size + 1
         else:
@@ -184,8 +188,12 @@ class LearningAgent(InteractiveAgent):
 class IndependentLearners(LearningAgent):
     def __init__(self, *agents):
         self.agents = list(agents)
-        self.observation_space = self.combine_spaces([agent.observation_space for agent in agents])
-        self.action_space = self.combine_spaces([agent.action_space for agent in agents])
+        self.observation_space = self.combine_spaces(
+            [agent.observation_space for agent in agents]
+        )
+        self.action_space = self.combine_spaces(
+            [agent.action_space for agent in agents]
+        )
 
     def combine_spaces(self, spaces):
         # if all(isinstance(space, gym.spaces.Discrete) for space in spaces):
@@ -193,14 +201,18 @@ class IndependentLearners(LearningAgent):
         return gym.spaces.Tuple(tuple(spaces))
 
     def action_step(self, obs_array):
-        return [agent.action_step(obs) if agent.active else agent.action_space.sample()
-                for agent, obs in zip(self.agents, obs_array)]
+        return [
+            agent.action_step(obs) if agent.active else agent.action_space.sample()
+            for agent, obs in zip(self.agents, obs_array)
+        ]
 
     def save_step(self, *values):
         values = [
-            v if hasattr(v, '__len__') and len(v) == len(self.agents) 
-            else [v for _ in self.agents] 
-            for v in values]
+            v
+            if hasattr(v, "__len__") and len(v) == len(self.agents)
+            else [v for _ in self.agents]
+            for v in values
+        ]
 
         for agent, agent_values in zip(self.agents, zip(*values)):
             agent.save_step(*agent_values)
@@ -215,7 +227,7 @@ class IndependentLearners(LearningAgent):
     def active(self):
         return np.array([agent.active for agent in self.agents], dtype=np.bool)
 
-    @contextmanager    
+    @contextmanager
     def episode(self):
         with ExitStack() as stack:
             for agent in self.agents:

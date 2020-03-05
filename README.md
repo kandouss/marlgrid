@@ -1,17 +1,28 @@
 # marlgrid
-Gridworld for MARL experiments
+Gridworld for MARL experiments.
+Based on [MiniGrid](https://github.com/maximecb/gym-minigrid)
 
 ## Training multiple independent learners
 
-Create an RL agent (subclassing `marlgrid.agents.LearningAgent`) that implements:
+### Pre-built environment
+
+MarlGrid comes with a few pre-built environments (see marlgrid/envs):
+- `MarlGrid-3AgentCluttered11x11-v0`
+- `MarlGrid-3AgentCluttered15x15-v0`
+- `MarlGrid-2AgentEmpty9x9-v0`
+- `MarlGrid-3AgentEmpty9x9-v0`
+- `MarlGrid-4AgentEmpty9x9-v0`
+(as of v0.0.2)
+
+### Custom environment
+
+Create an RL agent (e.g. `TestRLAgent` subclassing `marlgrid.agents.LearningAgent`) that implements:
  - `action_step(self, obs)`,
  - `save_step(self, *transition_values)`,
  - `start_episode(self)` (optional),
  - `end_episode(self)` (optional),
-
- e.g. `TestRLAgent`.
  
- Then multiple such agents can be trained in a MARLGrid environment like `ClutteredMultiGrid`:
+Then multiple such agents can be trained in a MARLGrid environment like `ClutteredMultiGrid`:
 
 ```
 agents = marlgrid.agents.IndependentLearners(
@@ -21,6 +32,7 @@ agents = marlgrid.agents.IndependentLearners(
 )
 
 env = ClutteredMultiGrid(agents, grid_size=15, n_clutter=10)
+
 
 for i_episode in range(N_episodes):
 
