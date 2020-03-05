@@ -4,6 +4,7 @@ from .base import (
 )
 from .objects import *
 
+
 class EmptyMultiGrid(MultiGridEnv):
     mission='get to the green square'
     metadata = {}
@@ -24,6 +25,7 @@ class ClutteredMultiGrid(MultiGridEnv):
         self.n_clutter = n_clutter
         self.randomize_goal = randomize_goal
         super().__init__(*args, **kwargs)
+
     def _gen_grid(self, width, height):
         self.grid = MultiGrid((width, height))
         self.grid.wall_rect(0, 0, width, height)
@@ -47,6 +49,7 @@ class VisibilityTestEnv(MultiGridEnv):
         self.grid.horz_wall(0, height//2, width-3, obj_type=Wall)
 
         self.place_agents()
+
 
 class DoorKeyEnv(MultiGridEnv):
     """

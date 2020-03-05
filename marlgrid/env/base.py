@@ -271,14 +271,17 @@ class MultiGrid:
 
 class MultiGridEnv:
 
-    def __init__(self, agents, grid_size=None, width=None, height=None, max_steps=100, see_through_walls=False, seed=1337):
+    def __init__(self, agents, grid_size=None, width=None, height=None, max_steps=100, see_through_walls=False, done_condition=None, seed=1337):
 
 
         if grid_size is not None:
             assert width == None and height == None
             width, height = grid_size, grid_size
 
-        
+        if done_condition is not None and done_condition not in ('any','all'):
+            raise ValueError("done_condition must be one of ['any', 'all', None].")
+        self.done_condition = done_condition
+
         self.num_agents = len(agents)
         self.agents = agents
 
@@ -486,9 +489,16 @@ class MultiGridEnv:
                     raise ValueError(f"Environment can't handle action {action}.")
             wasteds.append(wasted)
                 
-        dones = np.array([agent.done for agent in self.agents], dtype=np.bool)
+        done = np.array([agent.done for agent in self.agents], dtype=np.bool)
         if self.step_count >= self.max_steps:
-            dones[:] = True
+            done[:] = True
+
+        if self.done_condition is None:
+            pass
+        elif self.done_condition == 'any':
+            done = any(done)
+        elif self.done_condition == 'all':
+            done = all(done)
 
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
 
