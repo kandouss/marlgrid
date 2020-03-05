@@ -2,10 +2,14 @@ import gym
 import numpy as np
 import os
 import tqdm
-import moviepy.editor as mpy
 
 def export_video(X, outfile, fps=30, rescale_factor=2):
 
+    try:
+        import moviepy.editor as mpy
+    except:
+        raise ImportError("GridRecorder requires moviepy library. Try installing:\n $ pip install moviepy")
+    
     if isinstance(X, list):
         X = np.stack(X)
 
@@ -46,24 +50,23 @@ def render_frames(X, path, ext='png'):
         Image.fromarray(frame, 'RGB').save(os.path.join(path, f'frame_{k}.{ext}'))
 
 
-
 class GridRecorder(gym.core.Wrapper):
-    def __init__(self, env, max_len=1000):
+    default_max_len=1000
+    def __init__(self, env, max_len=None, render_kwargs={}):
         super().__init__(env)
 
-
-        try:
-            import moviepy.editor as mpy
-        except:
-            raise ImportError("GridRecorder requires moviepy library. Try installing:\n $ pip install moviepy")
 
         self.frames = None
         self.ptr = 0
         self.recording = False
-        if hasattr(env, 'max_steps') and env.max_steps != 0:
-            self.max_len = env.max_steps+1
+        self.render_kwargs = render_kwargs
+        if max_len is None:
+            if hasattr(env, 'max_steps') and env.max_steps != 0:
+                self.max_len = env.max_steps+1
+            else:
+                self.max_len = max_len+1
         else:
-            self.max_len = max_len+1
+            self.max_len = self.default_max_len+1
     
     def reset(self, **kwargs):
         self.ptr = 0
@@ -71,7 +74,7 @@ class GridRecorder(gym.core.Wrapper):
 
     def append_current_frame(self):
         if self.recording:
-            new_frame = self.env.render(mode='rgb_array')
+            new_frame = self.env.render(mode='rgb_array', **self.render_kwargs)
             if self.frames is None:
                 self.frames = np.zeros((self.max_len, *new_frame.shape), dtype=new_frame.dtype)
             self.frames[self.ptr] = new_frame
@@ -86,7 +89,7 @@ class GridRecorder(gym.core.Wrapper):
     def export_video(self, output_filename, fps=20, rescale_factor=1, render_last=True, render_frame_images=False, **kwargs):
         if self.recording:
             if render_last:
-                self.frames[self.ptr] = self.env.render(mode='rgb_array')
+                self.frames[self.ptr] = self.env.render(mode='rgb_array', **self.render_kwargs)
             if render_frame_images:
                 render_frames(self.frames[:self.ptr+1], output_filename)
             return export_video(self.frames[:self.ptr+1], output_filename, fps=fps, rescale_factor=rescale_factor, **kwargs)
