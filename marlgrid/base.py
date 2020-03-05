@@ -12,12 +12,11 @@ from .objects import Wall, Goal, Lava
 from .agents import InteractiveAgent
 from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
 
-
 TILE_PIXELS = 32
 
 
 class ObjectRegistry:
-    def __init__(self, objs=[], max_num_objects = 1000):
+    def __init__(self, objs=[], max_num_objects=1000):
         self.key_to_obj_map = {}
         self.obj_to_key_map = {}
         self.max_num_objects = max_num_objects
@@ -43,7 +42,7 @@ class ObjectRegistry:
 
     def contains_object(self, obj):
         return obj in self.obj_to_key_map
-    
+
     def contains_key(self, key):
         return key in self.key_to_obj_map
 
@@ -52,19 +51,20 @@ class ObjectRegistry:
             return self.obj_to_key_map[obj]
         else:
             return self.add_object(obj)
-    
+
     def obj_of_key(self, key):
         return self.key_to_obj_map[key]
+
 
 class MultiGrid:
 
     tile_cache = {}
 
     def __init__(self, shape, obj_reg=None, orientation=0):
-        self.orientation=orientation
+        self.orientation = orientation
         if isinstance(shape, tuple):
             self.width, self.height = shape
-            self.grid = np.zeros((self.width, self.height), dtype=np.uint8) # w,h
+            self.grid = np.zeros((self.width, self.height), dtype=np.uint8)  # w,h
         elif isinstance(shape, np.ndarray):
             self.width, self.height = shape.shape
             self.grid = shape
@@ -78,46 +78,59 @@ class MultiGrid:
         self.obj_reg = ObjectRegistry(objs=[None]) if obj_reg is None else obj_reg
 
     def __getitem__(self, *args, **kwargs):
-        return self.__class__(np.ndarray.__getitem__(self.grid, *args, **kwargs), obj_reg=self.obj_reg, orientation=self.orientation)
+        return self.__class__(
+            np.ndarray.__getitem__(self.grid, *args, **kwargs),
+            obj_reg=self.obj_reg,
+            orientation=self.orientation,
+        )
 
     def rotate_left(self, k=1):
-        return self.__class__(np.rot90(self.grid,k=k), obj_reg=self.obj_reg, orientation=(self.orientation-k)%4)
+        return self.__class__(
+            np.rot90(self.grid, k=k),
+            obj_reg=self.obj_reg,
+            orientation=(self.orientation - k) % 4,
+        )
 
     def slice(self, topX, topY, width, height, rot_k=0):
         """
         Get a subset of the grid
         """
-        sub_grid = self.__class__((width, height), obj_reg=self.obj_reg, orientation=(self.orientation-rot_k)%4)
+        sub_grid = self.__class__(
+            (width, height),
+            obj_reg=self.obj_reg,
+            orientation=(self.orientation - rot_k) % 4,
+        )
         x_min = max(0, topX)
-        x_max = min(topX+width, self.width)
+        x_max = min(topX + width, self.width)
         y_min = max(0, topY)
-        y_max = min(topY+height, self.height)
+        y_max = min(topY + height, self.height)
 
         x_offset = x_min - topX
         y_offset = y_min - topY
-        sub_grid.grid[x_offset:x_max-x_min+x_offset, y_offset:y_max-y_min+y_offset] = self.grid[x_min:x_max, y_min:y_max]
+        sub_grid.grid[
+            x_offset : x_max - x_min + x_offset, y_offset : y_max - y_min + y_offset
+        ] = self.grid[x_min:x_max, y_min:y_max]
         sub_grid.grid = np.rot90(sub_grid.grid, k=-rot_k)
-        sub_grid.width, sub_grid.height = sub_grid.grid.shape        
+        sub_grid.width, sub_grid.height = sub_grid.grid.shape
 
         return sub_grid
-
 
     def set(self, i, j, obj):
         assert i >= 0 and i < self.width
         assert j >= 0 and j < self.height
-        self.grid[i,j] = self.obj_reg.get_key(obj)
+        self.grid[i, j] = self.obj_reg.get_key(obj)
 
     def get(self, i, j):
         assert i >= 0 and i < self.width
         assert j >= 0 and j < self.height
 
-        return self.obj_reg.obj_of_key(self.grid[i,j])
+        return self.obj_reg.obj_of_key(self.grid[i, j])
 
     def horz_wall(self, x, y, length=None, obj_type=Wall):
         if length is None:
             length = self.width - x
         for i in range(0, length):
-            self.set(x+i, y, obj_type())
+            self.set(x + i, y, obj_type())
 
     def vert_wall(self, x, y, length=None, obj_type=Wall):
         if length is None:
@@ -127,21 +140,29 @@ class MultiGrid:
 
     def wall_rect(self, x, y, w, h, obj_type=Wall):
         self.horz_wall(x, y, w, obj_type=obj_type)
-        self.horz_wall(x, y+h-1, w, obj_type=obj_type)
+        self.horz_wall(x, y + h - 1, w, obj_type=obj_type)
         self.vert_wall(x, y, h, obj_type=obj_type)
-        self.vert_wall(x+w-1, y, h, obj_type=obj_type)
+        self.vert_wall(x + w - 1, y, h, obj_type=obj_type)
 
     def __str__(self):
-        render = lambda x: '  ' if x is None or not hasattr(x, 'str_render') else x.str_render(dir=self.orientation)
-        hstars = '*'*(2*self.width + 2)
+        render = (
+            lambda x: "  "
+            if x is None or not hasattr(x, "str_render")
+            else x.str_render(dir=self.orientation)
+        )
+        hstars = "*" * (2 * self.width + 2)
         return (
-             hstars +'\n'+
-            '\n'.join(
-                '*'+''.join(render(self.get(i,j)) for i in range(self.width) )+'*'
-             for j in range(self.height)
-        )+'\n'+hstars)
+            hstars
+            + "\n"
+            + "\n".join(
+                "*" + "".join(render(self.get(i, j)) for i in range(self.width)) + "*"
+                for j in range(self.height)
+            )
+            + "\n"
+            + hstars
+        )
 
-    def encode(self, vis_mask = None):
+    def encode(self, vis_mask=None):
         """
         Produce a compact numpy encoding of the grid
         """
@@ -149,7 +170,7 @@ class MultiGrid:
         if vis_mask is None:
             vis_mask = np.ones((self.width, self.height), dtype=bool)
 
-        array = np.zeros((self.width, self.height, 3), dtype='uint8')
+        array = np.zeros((self.width, self.height, 3), dtype="uint8")
 
         for i in range(self.width):
             for j in range(self.height):
@@ -162,22 +183,21 @@ class MultiGrid:
         return array
 
     @classmethod
-    def decode(cls,array):
+    def decode(cls, array):
         raise NotImplementedError
         width, height, channels = array.shape
         assert channels == 3
         # objects = {k: WorldObj.decode(k) for k in np.unique(array[:,:,0])}
         # print(objects)
-        vis_mask[i,j] = np.ones(shape=(width, height), dtype=np.bool)
+        vis_mask[i, j] = np.ones(shape=(width, height), dtype=np.bool)
         grid = cls((width, height))
-
 
     def process_vis(grid, agent_pos):
         mask = np.zeros_like(grid.grid, dtype=np.bool)
         mask[agent_pos[0], agent_pos[1]] = True
 
         for j in reversed(range(0, grid.height)):
-            for i in range(0, grid.width-1):
+            for i in range(0, grid.width - 1):
                 if not mask[i, j]:
                     continue
 
@@ -185,10 +205,10 @@ class MultiGrid:
                 if cell and not cell.see_behind():
                     continue
 
-                mask[i+1, j] = True
+                mask[i + 1, j] = True
                 if j > 0:
-                    mask[i+1, j-1] = True
-                    mask[i, j-1] = True
+                    mask[i + 1, j - 1] = True
+                    mask[i, j - 1] = True
 
             for i in reversed(range(1, grid.width)):
                 if not mask[i, j]:
@@ -198,10 +218,10 @@ class MultiGrid:
                 if cell and not cell.see_behind():
                     continue
 
-                mask[i-1, j] = True
+                mask[i - 1, j] = True
                 if j > 0:
-                    mask[i-1, j-1] = True
-                    mask[i, j-1] = True
+                    mask[i - 1, j - 1] = True
+                    mask[i, j - 1] = True
 
         for j in range(0, grid.height):
             for i in range(0, grid.width):
@@ -213,14 +233,19 @@ class MultiGrid:
     @classmethod
     def render_tile(cls, obj, highlight=False, tile_size=TILE_PIXELS, subdivs=3):
         if obj is None:
-            key = (tile_size, highlight, )
+            key = (
+                tile_size,
+                highlight,
+            )
         else:
             key = (tile_size, highlight, *obj.encode())
 
         if key in cls.tile_cache:
             img = cls.tile_cache[key]
         else:
-            img = np.zeros(shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8)
+            img = np.zeros(
+                shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
+            )
 
             # Draw the grid lines (top and left edges)
             fill_coords(img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100))
@@ -228,7 +253,7 @@ class MultiGrid:
 
             if obj != None:
                 obj.render(img)
-            
+
             if highlight:
                 highlight_img(img)
 
@@ -248,46 +273,62 @@ class MultiGrid:
 
         img = np.zeros(shape=(height_px, width_px, 3), dtype=np.uint8)
 
-
         for j in range(0, self.height):
             for i in range(0, self.width):
-                obj = self.get(i,j)
-                
+                obj = self.get(i, j)
 
                 tile_img = MultiGrid.render_tile(
-                    obj,
-                    highlight=highlight_mask[i,j],
-                    tile_size=tile_size
+                    obj, highlight=highlight_mask[i, j], tile_size=tile_size
                 )
 
                 ymin = j * tile_size
-                ymax = (j+1) * tile_size
+                ymax = (j + 1) * tile_size
                 xmin = i * tile_size
-                xmax = (i+1) * tile_size
-                img[ymin:ymax, xmin:xmax, :] =  np.rot90(tile_img, -self.orientation)
+                xmax = (i + 1) * tile_size
+                img[ymin:ymax, xmin:xmax, :] = np.rot90(tile_img, -self.orientation)
 
         return img
 
 
-class MultiGridEnv:
-
-    def __init__(self, agents, grid_size=None, width=None, height=None, max_steps=100, see_through_walls=False, seed=1337):
-
+class MultiGridEnv(gym.Env):
+    def __init__(
+        self,
+        agents,
+        grid_size=None,
+        width=None,
+        height=None,
+        max_steps=100,
+        see_through_walls=False,
+        done_condition=None,
+        seed=1337,
+    ):
 
         if grid_size is not None:
             assert width == None and height == None
             width, height = grid_size, grid_size
 
-        
+        if done_condition is not None and done_condition not in ("any", "all"):
+            raise ValueError("done_condition must be one of ['any', 'all', None].")
+        self.done_condition = done_condition
+
         self.num_agents = len(agents)
         self.agents = agents
 
-        self.action_space = gym.spaces.Tuple((gym.spaces.Discrete(len(agent.actions)) for agent in self.agents))
-        self.observation_space = gym.spaces.Tuple((
-            gym.spaces.Box(low=0, high=255, shape=(agent.view_size, agent.view_size, 3), dtype='uint8')
-            for agent in self.agents)
+        self.action_space = gym.spaces.Tuple(
+            tuple(gym.spaces.Discrete(len(agent.actions)) for agent in self.agents)
         )
-        self.reward_range = [(0,1) for _ in range(len(self.agents))]
+        self.observation_space = gym.spaces.Tuple(
+            tuple(
+                gym.spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(agent.view_size, agent.view_size, 3),
+                    dtype="uint8",
+                )
+                for agent in self.agents
+            )
+        )
+        self.reward_range = [(0, 1) for _ in range(len(self.agents))]
 
         self.window = None
 
@@ -304,7 +345,7 @@ class MultiGridEnv:
         # Seed the random number generator
         self.np_random, _ = gym.utils.seeding.np_random(seed)
         return [seed]
-    
+
     def _rand_int(self, low, high):
         """
         Generate random integer in [low,high[
@@ -324,7 +365,7 @@ class MultiGridEnv:
         Generate random boolean value
         """
 
-        return (self.np_random.randint(0, 2) == 0)
+        return self.np_random.randint(0, 2) == 0
 
     def _rand_elem(self, iterable):
         """
@@ -357,21 +398,25 @@ class MultiGridEnv:
     def gen_obs_grid(self, agent):
         topX, topY, botX, botY = agent.get_view_exts()
 
-        grid = self.grid.slice(topX, topY, agent.view_size, agent.view_size, rot_k = agent.dir + 1)
+        grid = self.grid.slice(
+            topX, topY, agent.view_size, agent.view_size, rot_k=agent.dir + 1
+        )
 
         # Process occluders and visibility
         # Note that this incurs some performance cost
         if not self.see_through_walls:
-            vis_mask = grid.process_vis(agent_pos=(agent.view_size // 2 , agent.view_size - 1))
+            vis_mask = grid.process_vis(
+                agent_pos=(agent.view_size // 2, agent.view_size - 1)
+            )
         else:
             vis_mask = np.ones(shape=(grid.width, grid.height), dtype=np.bool)
-        
+
         return grid, vis_mask
 
     def gen_agent_obs(self, agent):
         grid, vis_mask = self.gen_obs_grid(agent)
-        return grid.render(tile_size=agent.view_tile_size)#,highlight_mask=~vis_mask)
-    
+        return grid.render(tile_size=agent.view_tile_size)  # ,highlight_mask=~vis_mask)
+
     def gen_obs(self):
         """
         Generate the agent's view (partially observable, low-resolution encoding)
@@ -386,7 +431,7 @@ class MultiGridEnv:
         #         'mission': agent.mission
         #     })
 
-        return  [self.gen_agent_obs(agent) for agent in self.agents]
+        return [self.gen_agent_obs(agent) for agent in self.agents]
         # return obs_list
 
     # def get_obs_render(self, obs, agent, tile_size=TILE_PIXELS//2):
@@ -397,7 +442,7 @@ class MultiGridEnv:
 
     def step(self, actions):
         assert len(actions) == len(self.agents)
-        rewards = np.zeros((len(self.agents,)),dtype=np.float)
+        rewards = np.zeros((len(self.agents,)), dtype=np.float)
 
         self.step_count += 1
 
@@ -406,7 +451,7 @@ class MultiGridEnv:
         for agent_no, (agent, action) in enumerate(zip(self.agents, actions)):
             wasted = False
             if agent.active:
-                
+
                 cur_pos = agent.pos
                 cur_cell = self.grid.get(*cur_pos)
                 fwd_pos = agent.front_pos
@@ -414,11 +459,11 @@ class MultiGridEnv:
 
                 # Rotate left
                 if action == agent.actions.left:
-                    agent.dir = (agent.dir - 1)%4
+                    agent.dir = (agent.dir - 1) % 4
 
                 # Rotate right
                 elif action == agent.actions.right:
-                    agent.dir = (agent.dir + 1)%4
+                    agent.dir = (agent.dir + 1) % 4
 
                 # Move forward
                 elif action == agent.actions.forward:
@@ -440,8 +485,7 @@ class MultiGridEnv:
                     else:
                         wasted = True
 
-
-                    if isinstance(fwd_cell, Goal): # No extra wasting logic
+                    if isinstance(fwd_cell, Goal):  # No extra wasting logic
                         rewards[agent_no] += fwd_cell.reward
                         agent.done = True
                         fwd_cell.agent = None
@@ -468,14 +512,12 @@ class MultiGridEnv:
                     else:
                         wasted = True
 
-
                 # Toggle/activate an object
                 elif action == agent.actions.toggle:
                     if fwd_cell:
                         wasted = bool(fwd_cell.toggle(agent, fwd_pos))
                     else:
                         wasted = True
-                    
 
                 # Done action (not used by default)
                 elif action == agent.actions.done:
@@ -485,26 +527,34 @@ class MultiGridEnv:
                 else:
                     raise ValueError(f"Environment can't handle action {action}.")
             wasteds.append(wasted)
-                
-        dones = np.array([agent.done for agent in self.agents], dtype=np.bool)
+
+        done = np.array([agent.done for agent in self.agents], dtype=np.bool)
         if self.step_count >= self.max_steps:
-            dones[:] = True
+            done[:] = True
+
+        if self.done_condition is None:
+            pass
+        elif self.done_condition == "any":
+            done = any(done)
+        elif self.done_condition == "all":
+            done = all(done)
 
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
 
         wasteds = np.array(wasteds, dtype=np.bool)
 
-        return obs, rewards, dones, wasteds
-
+        return obs, rewards, done, wasteds
 
     @property
     def agent_positions(self):
-        return [tuple(agent.pos) if agent.pos is not None else None for agent in self.agents]
-    
+        return [
+            tuple(agent.pos) if agent.pos is not None else None for agent in self.agents
+        ]
+
     def place_obj(self, obj, top=None, size=None, reject_fn=None, max_tries=math.inf):
         max_tries = int(max(1, min(max_tries, 1e5)))
         if top is None:
-            top = (0,0)
+            top = (0, 0)
         else:
             top = (max(top[0], 0), max(top[1], 0))
         if size is None:
@@ -514,17 +564,19 @@ class MultiGridEnv:
         for try_no in range(max_tries):
             pos = (
                 self._rand_int(top[0], min(top[0] + size[0], self.grid.width)),
-                self._rand_int(top[1], min(top[1] + size[1], self.grid.height))
+                self._rand_int(top[1], min(top[1] + size[1], self.grid.height)),
             )
 
-            if((self.grid.get(*pos) is None)
+            if (
+                (self.grid.get(*pos) is None)
                 and (pos not in agent_positions)
                 and (reject_fn is None or (not reject_fn(pos)))
-                ): break
+            ):
+                break
         else:
             raise RecursionError("Rejection sampling failed in place_obj.")
 
-        self.grid.set(*pos,obj)
+        self.grid.set(*pos, obj)
         if obj is not None:
             obj.init_pos = pos
             obj.cur_pos = pos
@@ -543,16 +595,26 @@ class MultiGridEnv:
     def place_agent(self, agent, top=None, size=None, rand_dir=True, max_tries=100):
         agent.pos = self.place_obj(agent, top=top, size=size, max_tries=max_tries)
         if rand_dir:
-            agent.dir = self._rand_int(0,4)
+            agent.dir = self._rand_int(0, 4)
         return agent
 
     def place_agents(self, top=None, size=None, rand_dir=True, max_tries=100):
         for agent in self.agents:
-            self.place_agent(agent, top=top, size=size, rand_dir=rand_dir, max_tries=max_tries)
-            if hasattr(self, 'mission'):
+            self.place_agent(
+                agent, top=top, size=size, rand_dir=rand_dir, max_tries=max_tries
+            )
+            if hasattr(self, "mission"):
                 agent.mission = self.mission
 
-    def render(self, mode='human', close=False, highlight=True, tile_size=TILE_PIXELS, show_agent_views=True, max_agents_per_col=3,):
+    def render(
+        self,
+        mode="human",
+        close=False,
+        highlight=True,
+        tile_size=TILE_PIXELS,
+        show_agent_views=True,
+        max_agents_per_col=3,
+    ):
         """
         Render the whole-grid human view
         """
@@ -562,8 +624,9 @@ class MultiGridEnv:
                 self.window.close()
             return
 
-        if mode == 'human' and not self.window:
+        if mode == "human" and not self.window:
             from gym.envs.classic_control.rendering import SimpleImageViewer
+
             self.window = SimpleImageViewer()
             # self.window.show(block=False)
 
@@ -573,42 +636,46 @@ class MultiGridEnv:
             xlow, ylow, xhigh, yhigh = agent.get_view_exts()
             if agent.active:
                 highlight_mask[
-                    max(0,xlow):min(self.grid.width,xhigh),
-                    max(0,ylow):min(self.grid.height,yhigh)] = True
+                    max(0, xlow) : min(self.grid.width, xhigh),
+                    max(0, ylow) : min(self.grid.height, yhigh),
+                ] = True
 
         # Render the whole grid
         img = self.grid.render(
-            tile_size,
-            highlight_mask=highlight_mask if highlight else None
+            tile_size, highlight_mask=highlight_mask if highlight else None
         )
-        rescale = lambda X, rescale_factor=2: np.kron(X, np.ones((rescale_factor, rescale_factor, 1)))
-        
+        rescale = lambda X, rescale_factor=2: np.kron(
+            X, np.ones((rescale_factor, rescale_factor, 1))
+        )
+
         if show_agent_views:
             agent_no = 0
             cols = []
             rescale_factor = None
 
-            for col_no in range(len(self.agents)//(max_agents_per_col+1)+1):
-                col_count = min(max_agents_per_col, len(self.agents)-agent_no)
+            for col_no in range(len(self.agents) // (max_agents_per_col + 1) + 1):
+                col_count = min(max_agents_per_col, len(self.agents) - agent_no)
                 views = []
                 for row_no in range(col_count):
                     tmp = self.gen_agent_obs(self.agents[agent_no])
                     if rescale_factor is None:
-                        rescale_factor = img.shape[0]//(min(3,col_count)*tmp.shape[1])
+                        rescale_factor = img.shape[0] // (
+                            min(3, col_count) * tmp.shape[1]
+                        )
                     views.append(rescale(tmp, rescale_factor))
                     agent_no += 1
 
                 col_width = max([v.shape[1] for v in views])
                 img_col = np.zeros((img.shape[0], col_width, 3), dtype=np.uint8)
-                for k,view in enumerate(views):
-                    start_x = (k*img.shape[0])//len(views)
-                    start_y = 0#(k*img.shape[1])//len(views)
+                for k, view in enumerate(views):
+                    start_x = (k * img.shape[0]) // len(views)
+                    start_y = 0  # (k*img.shape[1])//len(views)
                     dx, dy = view.shape[:2]
-                    img_col[start_x:start_x+dx, start_y:start_y+dy,:] = view
+                    img_col[start_x : start_x + dx, start_y : start_y + dy, :] = view
                 cols.append(img_col)
-            img = np.concatenate((img, *cols),axis=1)
+            img = np.concatenate((img, *cols), axis=1)
 
-        if mode == 'human':
+        if mode == "human":
             self.window.imshow(img)
 
         return img
