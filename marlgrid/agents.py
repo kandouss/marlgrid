@@ -33,14 +33,12 @@ class InteractiveAgent(Agent):
         )
 
         self.action_space = gym.spaces.Discrete(len(self.actions))
-        self.done = True
 
         self.reset()
 
     def reset(self):
         self.done = False
         self.pos = None
-        self.dir = 0
         self.carrying = None
         self.mission = ""
 

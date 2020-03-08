@@ -43,11 +43,11 @@ def register_marl_env(
 
 
 register_marl_env(
-    "MarlGrid-3AgentCluttered9x9-v0",
+    "MarlGrid-3AgentCluttered11x11-v0",
     ClutteredMultiGrid,
     n_agents=3,
-    grid_size=9,
-    view_size=11,
+    grid_size=11,
+    view_size=7,
 )
 
 register_marl_env(
@@ -55,17 +55,17 @@ register_marl_env(
     ClutteredMultiGrid,
     n_agents=3,
     grid_size=15,
-    view_size=11,
+    view_size=7,
 )
 
 register_marl_env(
-    "MarlGrid-2AgentEmpty9x9-v0", EmptyMultiGrid, n_agents=2, grid_size=9, view_size=11
+    "MarlGrid-2AgentEmpty9x9-v0", EmptyMultiGrid, n_agents=2, grid_size=9, view_size=7
 )
 
 register_marl_env(
-    "MarlGrid-3AgentEmpty9x9-v0", EmptyMultiGrid, n_agents=3, grid_size=9, view_size=11
+    "MarlGrid-3AgentEmpty9x9-v0", EmptyMultiGrid, n_agents=3, grid_size=9, view_size=7
 )
 
 register_marl_env(
-    "MarlGrid-4AgentEmpty9x9-v0", EmptyMultiGrid, n_agents=4, grid_size=9, view_size=11
+    "MarlGrid-4AgentEmpty9x9-v0", EmptyMultiGrid, n_agents=4, grid_size=9, view_size=7
 )
