@@ -1,6 +1,7 @@
 # MarlGrid
 Gridworld for MARL experiments, based on [MiniGrid](https://github.com/maximecb/gym-minigrid).
 
+[![Three agents navigating a cluttered MarlGrid environment.](https://img.youtube.com/vi/e0xL6KB6RBA/0.jpg)](https://youtube.com/watch?v=e0xL6KB6RBA)
 <video src="https://kam.al/images/extra/cluttered_multigrid_example.mp4" id="spinning-video" controls preload loop style="width:400px; max-width:100%; display:block; margin-left:auto; margin-right:auto; margin-bottom:20px;"></video>
 
 ## Training multiple independent learners
