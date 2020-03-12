@@ -47,8 +47,8 @@ register_marl_env(
     ClutteredMultiGrid,
     n_agents=1,
     grid_size=11,
-    n_clutter=30,
     view_size=5,
+    env_kwargs={'n_clutter':30}
 )
 
 register_marl_env(
