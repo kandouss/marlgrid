@@ -16,8 +16,9 @@ def register_marl_env(
     env_name,
     env_class,
     n_agents,
-    view_size,
     grid_size,
+    view_size,
+    view_tile_size=8,
     done_condition="all",
     env_kwargs={},
 ):
@@ -28,7 +29,7 @@ def register_marl_env(
         def __init__(self):
             super().__init__(
                 agents=[
-                    InteractiveAgent(color=c, view_size=view_size)
+                    InteractiveAgent(color=c, view_size=view_size,)
                     for c in colors[:n_agents]
                 ],
                 grid_size=grid_size,
@@ -41,6 +42,14 @@ def register_marl_env(
     registered_envs.append(env_name)
     gym_register(env_name, entry_point=f"marlgrid.envs:{env_class_name}")
 
+register_marl_env(
+    "MarlGrid-1AgentCluttered15x15-v0",
+    ClutteredMultiGrid,
+    n_agents=1,
+    grid_size=11,
+    n_clutter=30,
+    view_size=5,
+)
 
 register_marl_env(
     "MarlGrid-3AgentCluttered11x11-v0",
