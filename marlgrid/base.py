@@ -486,7 +486,8 @@ class MultiGridEnv(gym.Env):
                         wasted = True
 
                     if isinstance(fwd_cell, Goal):  # No extra wasting logic
-                        rewards[agent_no] += fwd_cell.reward
+                        rewards[agent_no] += fwd_cell.reward * (1.0-0.9*(self.step_count/self.max_steps))
+                        # print(f"Goal reward was {1.0-0.9*(self.step_count/self.max_steps) }")
                         agent.done = True
                         fwd_cell.agent = None
 
