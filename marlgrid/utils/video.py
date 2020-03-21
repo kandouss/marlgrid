@@ -40,7 +40,7 @@ def render_frames(X, path, ext="png"):
     try:
         from PIL import Image
     except ImportError as e:
-        raise ImporErroR(
+        raise ImporError(
             "Error importing from PIL in export_frames. Try installing PIL:\n $ pip install Pillow"
         )
 
