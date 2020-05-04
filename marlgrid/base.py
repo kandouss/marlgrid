@@ -110,7 +110,17 @@ class MultiGrid:
         sub_grid.grid[
             x_offset : x_max - x_min + x_offset, y_offset : y_max - y_min + y_offset
         ] = self.grid[x_min:x_max, y_min:y_max]
-        sub_grid.grid = np.rot90(sub_grid.grid, k=-rot_k)
+
+        rot_k = rot_k % 4
+        # tgt = np.rot90(sub_grid.grid, k=-rot_k)
+        # ^^ Old style. rot90 was the slowest part of the entire rendering process.
+        if rot_k==3:
+            sub_grid.grid = sub_grid.grid[:,::-1].T
+        elif rot_k==1:
+            sub_grid.grid = sub_grid.grid[::-1,:].T
+        elif rot_k==2:
+            sub_grid.grid = sub_grid.grid[::-1,::-1]
+
         sub_grid.width, sub_grid.height = sub_grid.grid.shape
 
         return sub_grid
@@ -123,8 +133,8 @@ class MultiGrid:
     def get(self, i, j):
         assert i >= 0 and i < self.width
         assert j >= 0 and j < self.height
-
-        return self.obj_reg.obj_of_key(self.grid[i, j])
+        #return self.obj_reg.obj_of_key(self.grid[i, j])
+        return self.obj_reg.key_to_obj_map[self.grid[i, j]]
 
     def horz_wall(self, x, y, length=None, obj_type=Wall):
         if length is None:
@@ -257,7 +267,7 @@ class MultiGrid:
             if highlight:
                 highlight_img(img)
 
-            img = downsample(img, subdivs)
+            img = downsample(img, subdivs).astype(np.uint8)
 
             cls.tile_cache[key] = img
 
@@ -285,7 +295,15 @@ class MultiGrid:
                 ymax = (j + 1) * tile_size
                 xmin = i * tile_size
                 xmax = (i + 1) * tile_size
-                img[ymin:ymax, xmin:xmax, :] = np.rot90(tile_img, -self.orientation)
+
+                if self.orientation%4 == 3:
+                    img[ymin:ymax, xmin:xmax, :] = tile_img[:,::-1].transpose(1,0,2)
+                elif self.orientation%4 == 1:
+                    img[ymin:ymax, xmin:xmax, :] = tile_img[::-1,:].transpose(1,0,2)
+                elif self.orientation%4 == 2:
+                    img[ymin:ymax, xmin:xmax, :] = tile_img[::-1,::-1]
+                else:
+                    img[ymin:ymax, xmin:xmax, :] = tile_img
 
         return img
 
@@ -300,6 +318,7 @@ class MultiGridEnv(gym.Env):
         max_steps=100,
         see_through_walls=False,
         done_condition=None,
+        reward_decay=True,
         seed=1337,
     ):
 
@@ -336,7 +355,7 @@ class MultiGridEnv(gym.Env):
         self.height = height
         self.max_steps = max_steps
         self.see_through_walls = see_through_walls
-
+        self.reward_decay = reward_decay
         self.seed(seed=seed)
 
         self.reset()
@@ -486,7 +505,10 @@ class MultiGridEnv(gym.Env):
                         wasted = True
 
                     if isinstance(fwd_cell, Goal):  # No extra wasting logic
-                        rewards[agent_no] += fwd_cell.reward * (1.0-0.9*(self.step_count/self.max_steps))
+                        if bool(self.reward_decay):
+                            rewards[agent_no] += fwd_cell.reward * (1.0-0.9*(self.step_count/self.max_steps))
+                        else:
+                            rewards[agent_no] += fwd_cell.reward 
                         # print(f"Goal reward was {1.0-0.9*(self.step_count/self.max_steps) }")
                         agent.done = True
                         fwd_cell.agent = None
