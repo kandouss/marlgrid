@@ -52,6 +52,8 @@ class ObjectRegistry:
         else:
             return self.add_object(obj)
 
+    # 5/4/2020 This gets called A LOT. Replaced calls to this function with direct dict gets
+    #           in an attempt to speed things up. Probably didn't make a big difference.
     def obj_of_key(self, key):
         return self.key_to_obj_map[key]
 
@@ -133,7 +135,7 @@ class MultiGrid:
     def get(self, i, j):
         assert i >= 0 and i < self.width
         assert j >= 0 and j < self.height
-        #return self.obj_reg.obj_of_key(self.grid[i, j])
+
         return self.obj_reg.key_to_obj_map[self.grid[i, j]]
 
     def horz_wall(self, x, y, length=None, obj_type=Wall):
@@ -295,6 +297,9 @@ class MultiGrid:
                 ymax = (j + 1) * tile_size
                 xmin = i * tile_size
                 xmax = (i + 1) * tile_size
+
+                # Old style, slower than flip+transpose:
+                # img[ymin:ymax, xmin:xmax, :] = np.rot90(tile_img, -self.orientation)
 
                 if self.orientation%4 == 3:
                     img[ymin:ymax, xmin:xmax, :] = tile_img[:,::-1].transpose(1,0,2)
