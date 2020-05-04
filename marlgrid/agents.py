@@ -11,10 +11,10 @@ class InteractiveAgent(Agent):
         left = 0  # Rotate left
         right = 1  # Rotate right
         forward = 2  # Move forward
-        # pickup = 3  # Pick up an object
-        # drop = 4  # Drop an object
-        # toggle = 5  # Toggle/activate an object
-        # done = 6  # Done completing task
+        pickup = 3  # Pick up an object
+        drop = 4  # Drop an object
+        toggle = 5  # Toggle/activate an object
+        done = 6  # Done completing task
 
     def __init__(self, view_size, view_tile_size=7, actions=None, **kwargs):
         super().__init__(**{"color": "red", **kwargs})
@@ -200,7 +200,7 @@ class IndependentLearners(LearningAgent):
 
     def action_step(self, obs_array):
         return [
-            agent.action_step(obs) if agent.active else 0
+            agent.action_step(obs) if agent.active else agent.action_space.sample()
             for agent, obs in zip(self.agents, obs_array)
         ]
 
