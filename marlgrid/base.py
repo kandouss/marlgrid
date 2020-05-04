@@ -71,7 +71,6 @@ class MultiGrid:
             self.width, self.height = shape.shape
             self.grid = shape
         else:
-            # print(shape)
             raise ValueError("Must create grid from shape tuple or array.")
 
         if self.width < 3 or self.height < 3:
@@ -199,8 +198,6 @@ class MultiGrid:
         raise NotImplementedError
         width, height, channels = array.shape
         assert channels == 3
-        # objects = {k: WorldObj.decode(k) for k in np.unique(array[:,:,0])}
-        # print(objects)
         vis_mask[i, j] = np.ones(shape=(width, height), dtype=np.bool)
         grid = cls((width, height))
 
@@ -514,7 +511,6 @@ class MultiGridEnv(gym.Env):
                             rewards[agent_no] += fwd_cell.reward * (1.0-0.9*(self.step_count/self.max_steps))
                         else:
                             rewards[agent_no] += fwd_cell.reward 
-                        # print(f"Goal reward was {1.0-0.9*(self.step_count/self.max_steps) }")
                         agent.done = True
                         fwd_cell.agent = None
 
