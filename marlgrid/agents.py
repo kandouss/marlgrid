@@ -56,7 +56,6 @@ class InteractiveAgent(Agent):
         Get the direction vector for the agent, pointing in the direction
         of forward movement.
         """
-        # print(f"DIR IS {self.dir}")
         assert self.dir >= 0 and self.dir < 4
         return np.array([[1, 0], [0, 1], [-1, 0], [0, -1]])[self.dir]
 
