@@ -36,7 +36,6 @@ def export_video(X, outfile, fps=30, rescale_factor=2):
 
 
 def render_frames(X, path, ext="png"):
-
     try:
         from PIL import Image
     except ImportError as e:
@@ -57,7 +56,7 @@ def render_frames(X, path, ext="png"):
 class GridRecorder(gym.core.Wrapper):
     default_max_len = 1000
 
-    def __init__(self, env, max_len=None, render_kwargs={}):
+    def __init__(self, env, max_len=1000, render_kwargs={}):
         super().__init__(env)
 
         self.frames = None
@@ -68,9 +67,10 @@ class GridRecorder(gym.core.Wrapper):
             if hasattr(env, "max_steps") and env.max_steps != 0:
                 self.max_len = env.max_steps + 1
             else:
-                self.max_len = max_len + 1
+                self.max_len = self.default_max_len + 1
         else:
-            self.max_len = self.default_max_len + 1
+            self.max_len = max_len + 1
+            
 
     def reset(self, **kwargs):
         self.ptr = 0
