@@ -11,4 +11,6 @@ class EmptyMultiGrid(MultiGridEnv):
         self.grid.wall_rect(0, 0, width, height)
         self.put_obj(Goal(color="green", reward=1), width - 2, height - 2)
 
-        self.place_agents()
+
+        self.agent_spawn_kwargs = {}
+        self.place_agents(**self.agent_spawn_kwargs)

@@ -1,13 +1,12 @@
 import gym
 import numpy as np
 from enum import IntEnum
-from contextlib import contextmanager, ExitStack
 
-from .objects import Agent
+from .objects import GridAgent
 
 
-class InteractiveAgent(Agent):
-    class DefaultActions(IntEnum):
+class InteractiveGridAgent(GridAgent):
+    class actions(IntEnum):
         left = 0  # Rotate left
         right = 1  # Rotate right
         forward = 2  # Move forward
@@ -16,12 +15,9 @@ class InteractiveAgent(Agent):
         toggle = 5  # Toggle/activate an object
         done = 6  # Done completing task
 
-    def __init__(self, view_size, view_tile_size=7, actions=None, **kwargs):
-        super().__init__(**{"color": "red", **kwargs})
-        if actions is None:
-            actions = self.DefaultActions
+    def __init__(self, view_size=7, view_tile_size=5, **kwargs):
+        super().__init__(**kwargs)
 
-        self.actions = actions
         self.view_size = view_size
         self.view_tile_size = view_tile_size
 
@@ -33,6 +29,13 @@ class InteractiveAgent(Agent):
         )
 
         self.action_space = gym.spaces.Discrete(len(self.actions))
+
+
+        self.metadata = {
+            **self.metadata,
+            'view_size': view_size,
+            'view_tile_size': view_tile_size,
+        }
 
         self.reset()
 
@@ -152,90 +155,3 @@ class InteractiveAgent(Agent):
 
     def sees(self, x, y):
         raise NotImplementedError
-
-
-class LearningAgent(InteractiveAgent):
-    def __init__(self, *args, **kwargs):
-        # InteractiveAgent init notably sets self.action_space, self.observation_space
-        super().__init__(*args, **kwargs)
-        self.last_obs = None
-
-        self.n_episodes = 0
-
-    def action_step(self, obs):
-        raise NotImplementedError
-
-    def save_step(self, *values):
-        raise NotImplementedError
-
-    def start_episode(self):
-        raise NotImplementedError
-
-    def end_episode(self):
-        raise NotImplementedError
-
-    @contextmanager
-    def episode(self):
-        self.start_episode()
-        yield self
-        self.end_episode()
-        self.n_episodes += 1
-
-
-class IndependentLearners(LearningAgent):
-    def __init__(self, *agents):
-        self.agents = list(agents)
-        self.observation_space = self.combine_spaces(
-            [agent.observation_space for agent in agents]
-        )
-        self.action_space = self.combine_spaces(
-            [agent.action_space for agent in agents]
-        )
-
-    def combine_spaces(self, spaces):
-        # if all(isinstance(space, gym.spaces.Discrete) for space in spaces):
-        #     return gym.spaces.MultiDiscrete([space.n for space in spaces])
-        return gym.spaces.Tuple(tuple(spaces))
-
-    def action_step(self, obs_array):
-        return [
-            agent.action_step(obs) if agent.active else agent.action_space.sample()
-            for agent, obs in zip(self.agents, obs_array)
-        ]
-
-    def save_step(self, *values):
-        values = [
-            v
-            if hasattr(v, "__len__") and len(v) == len(self.agents)
-            else [v for _ in self.agents]
-            for v in values
-        ]
-
-        for agent, agent_values in zip(self.agents, zip(*values)):
-            agent.save_step(*agent_values)
-
-    def start_episode(self):
-        pass
-
-    def end_episode(self):
-        pass
-
-    @property
-    def active(self):
-        return np.array([agent.active for agent in self.agents], dtype=np.bool)
-
-    @contextmanager
-    def episode(self):
-        with ExitStack() as stack:
-            for agent in self.agents:
-                stack.enter_context(agent.episode())
-            yield self
-
-    def __len__(self):
-        return len(self.agents)
-
-    def __getitem__(self, key):
-        return self.agents[key]
-
-    def __iter__(self):
-        return self.agents.__iter__()

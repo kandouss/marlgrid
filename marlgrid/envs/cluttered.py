@@ -21,4 +21,5 @@ class ClutteredMultiGrid(MultiGridEnv):
         for _ in range(self.n_clutter):
             self.place_obj(Wall(), max_tries=100)
 
-        self.place_agents()
+        self.agent_spawn_kwargs = {}
+        self.place_agents(**self.agent_spawn_kwargs)

@@ -9,7 +9,7 @@ from enum import IntEnum
 import math
 
 from .objects import Wall, Goal, Lava
-from .agents import InteractiveAgent
+# from .agents import InteractiveGridAgent
 from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
 
 TILE_PIXELS = 32
@@ -322,6 +322,7 @@ class MultiGridEnv(gym.Env):
         done_condition=None,
         reward_decay=True,
         seed=1337,
+        respawn=False
     ):
 
         if grid_size is not None:
@@ -334,6 +335,7 @@ class MultiGridEnv(gym.Env):
 
         self.num_agents = len(agents)
         self.agents = agents
+        self.respawn = respawn
 
         self.action_space = gym.spaces.Tuple(
             tuple(gym.spaces.Discrete(len(agent.actions)) for agent in self.agents)
@@ -359,6 +361,7 @@ class MultiGridEnv(gym.Env):
         self.see_through_walls = see_through_walls
         self.reward_decay = reward_decay
         self.seed(seed=seed)
+        self.agent_spawn_kwargs = {}
 
         self.reset()
 
@@ -462,7 +465,10 @@ class MultiGridEnv(gym.Env):
         return self.grid.__str__()
 
     def step(self, actions):
-        assert len(actions) == len(self.agents)
+        try:
+            assert len(actions) == len(self.agents)
+        except:
+            print("FAILED WITH ACTIONS", actions)
         rewards = np.zeros((len(self.agents,)), dtype=np.float)
 
         self.step_count += 1
@@ -552,16 +558,21 @@ class MultiGridEnv(gym.Env):
                     raise ValueError(f"Environment can't handle action {action}.")
             wasteds.append(wasted)
 
-        done = np.array([agent.done for agent in self.agents], dtype=np.bool)
         if self.step_count >= self.max_steps:
-            done[:] = True
+            dones = [True for agent in self.agents]
+        else:
+            dones = []
+            for agent in self.agents:
+                if agent.done and self.respawn:
+                    agent.reset()
+                    self.place_agent(agent, **self.agent_spawn_kwargs)
+                dones.append(agent.done)
 
-        if self.done_condition is None:
-            pass
-        elif self.done_condition == "any":
-            done = any(done)
+        done = np.array(dones, dtype=np.bool)
+        if self.done_condition == "any":
+            done = done.any()
         elif self.done_condition == "all":
-            done = all(done)
+            done = done.all()
 
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
 
@@ -616,13 +627,13 @@ class MultiGridEnv(gym.Env):
         obj.init_pos = (i, j)
         obj.cur_pos = (i, j)
 
-    def place_agent(self, agent, top=None, size=None, rand_dir=True, max_tries=100):
+    def place_agent(self, agent, top=None, size=None, rand_dir=True, max_tries=1000):
         agent.pos = self.place_obj(agent, top=top, size=size, max_tries=max_tries)
         if rand_dir:
             agent.dir = self._rand_int(0, 4)
         return agent
 
-    def place_agents(self, top=None, size=None, rand_dir=True, max_tries=100):
+    def place_agents(self, top=None, size=None, rand_dir=True, max_tries=1000):
         for agent in self.agents:
             self.place_agent(
                 agent, top=top, size=size, rand_dir=rand_dir, max_tries=max_tries

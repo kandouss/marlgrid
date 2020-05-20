@@ -37,4 +37,5 @@ class DoorKeyEnv(MultiGridEnv):
         # Place a yellow key on the left side
         self.place_obj(obj=Key("yellow"), top=(0, 0), size=(splitIdx, height))
 
-        self.place_agents()
+        self.agent_spawn_kwargs = {}
+        self.place_agents(**self.agent_spawn_kwargs)

@@ -3,7 +3,7 @@ from .doorkey import DoorKeyEnv
 from .cluttered import ClutteredMultiGrid
 from .viz_test import VisibilityTestEnv
 
-from ..agents import InteractiveAgent
+from ..agents import InteractiveGridAgent
 from gym.envs.registration import register as gym_register
 
 import sys
@@ -29,7 +29,7 @@ def register_marl_env(
         def __init__(self):
             super().__init__(
                 agents=[
-                    InteractiveAgent(color=c, view_size=view_size, view_tile_size=8)
+                    InteractiveGridAgent(color=c, view_size=view_size, view_tile_size=8)
                     for c in colors[:n_agents]
                 ],
                 grid_size=grid_size,

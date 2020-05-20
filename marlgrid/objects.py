@@ -48,7 +48,7 @@ class WorldObj(metaclass=MetaRegistry):
         self.agent = (
             None  # Some objects can have agents on top (e.g. floor, open doors, etc).
         )
-
+        
         self.pos_init = None
         self.pos = None
 
@@ -114,7 +114,13 @@ class WorldObj(metaclass=MetaRegistry):
         return "??"
 
 
-class Agent(WorldObj):
+class GridAgent(WorldObj):
+    def __init__(self, *args, color='red', **kwargs):
+        super().__init__(*args, **{'color':color, **kwargs})
+        self.metadata = {
+            'color': color
+        }
+
     @property
     def dir(self):
         return self.state % 4
