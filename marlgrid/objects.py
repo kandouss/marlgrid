@@ -14,11 +14,13 @@ COLORS = {
     "orange": np.array([255, 165, 0]),
     "green": np.array([0, 255, 0]),
     "blue": np.array([0, 0, 255]),
+    "cyan": np.array([0, 139, 139]),
     "purple": np.array([112, 39, 195]),
     "yellow": np.array([255, 255, 0]),
     "olive": np.array([128, 128, 0]),
     "grey": np.array([100, 100, 100]),
     "worst": np.array([74, 65, 42]),  # https://en.wikipedia.org/wiki/Pantone_448_C
+    "pink": np.array([255, 0, 189]),
 }
 # Used to map colors to integers
 COLOR_TO_IDX = dict({v: k for k, v in enumerate(COLORS.keys())})
@@ -45,9 +47,7 @@ class WorldObj(metaclass=MetaRegistry):
         self.state = state
         self.contains = None
 
-        self.agent = (
-            None  # Some objects can have agents on top (e.g. floor, open doors, etc).
-        )
+        self.agents = [] # Some objects can have agents on top (e.g. floor, open doors, etc).
         
         self.pos_init = None
         self.pos = None
@@ -76,8 +76,8 @@ class WorldObj(metaclass=MetaRegistry):
         return False
 
     def encode(self, str_class=False):
-        if self.agent is not None:
-            return self.agent.encode(str_class=str_class)
+        if len(self.agents)>0:
+            return self.agents[0].encode(str_class=str_class)
         else:
             if str_class:
                 return (self.type, self.color, self.state)
@@ -132,6 +132,9 @@ class GridAgent(WorldObj):
     def str_render(self, dir=0):
         return [">>", "VV", "<<", "^^"][(self.dir + dir) % 4]
 
+    def can_overlap(self):
+        return True
+
     @property
     def active(self):
         return False
@@ -144,9 +147,10 @@ class GridAgent(WorldObj):
         fill_coords(img, tri_fn, COLORS[self.color])
 
 
+
 class BulkObj(WorldObj):
     def __hash__(self):
-        return hash((self.__class__, self.color, self.state, self.agent))
+        return hash((self.__class__, self.color, self.state, tuple(self.agents)))
 
     def __eq__(self, other):
         return hash(self) == hash(other)
@@ -169,7 +173,7 @@ class Goal(WorldObj):
 
 class Floor(WorldObj):
     def can_overlap(self):
-        return True and self.agent is None
+        return True# and self.agent is None
 
     def str_render(self, dir=0):
         return "FF"
@@ -197,7 +201,7 @@ class EmptySpace(WorldObj):
 
 class Lava(WorldObj):
     def can_overlap(self):
-        return True and self.agent is None
+        return True# and self.agent is None
 
     def str_render(self, dir=0):
         return "VV"
@@ -266,7 +270,7 @@ class Door(WorldObj):
     states = IntEnum("door_state", "open closed locked")
 
     def can_overlap(self):
-        return self.state == self.states.open and self.agent is None  # is open
+        return self.state == self.states.open# and self.agent is None  # is open
 
     def see_behind(self):
         return self.state == self.states.open  # is open
