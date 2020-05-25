@@ -6,10 +6,21 @@ class ClutteredMultiGrid(MultiGridEnv):
     mission = "get to the green square"
     metadata = {}
 
-    def __init__(self, *args, n_clutter=25, randomize_goal=False, **kwargs):
-        self.n_clutter = n_clutter
-        self.randomize_goal = randomize_goal
+    def __init__(self, *args, n_clutter=None, clutter_density=None, randomize_goal=False, **kwargs):
+        if (n_clutter is None) == (clutter_density is None):
+            raise ValueError("Must provide n_clutter xor clutter_density in environment config.")
+
         super().__init__(*args, **kwargs)
+
+        if clutter_density is not None:
+            self.n_clutter = int(clutter_density * (self.width-2)*(self.height-2))
+        else:
+            self.n_clutter = n_clutter
+
+        self.randomize_goal = randomize_goal
+
+        self.reset()
+
 
     def _gen_grid(self, width, height):
         self.grid = MultiGrid((width, height))

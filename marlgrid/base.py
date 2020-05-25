@@ -8,8 +8,7 @@ import gym_minigrid
 from enum import IntEnum
 import math
 
-from .objects import Wall, Goal, Lava
-# from .agents import InteractiveGridAgent
+from .objects import Wall, Goal, Lava, GridAgent
 from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
 
 TILE_PIXELS = 32
@@ -322,7 +321,8 @@ class MultiGridEnv(gym.Env):
         done_condition=None,
         reward_decay=True,
         seed=1337,
-        respawn=False
+        respawn=False,
+        ghost_mode=True,
     ):
 
         if grid_size is not None:
@@ -362,8 +362,9 @@ class MultiGridEnv(gym.Env):
         self.reward_decay = reward_decay
         self.seed(seed=seed)
         self.agent_spawn_kwargs = {}
+        self.ghost_mode = ghost_mode
 
-        self.reset()
+        # self.reset()
 
     def seed(self, seed=1337):
         # Seed the random number generator
@@ -402,6 +403,7 @@ class MultiGridEnv(gym.Env):
 
     def reset(self):
         for agent in self.agents:
+            agent.agents = []
             agent.reset()
 
         self._gen_grid(self.width, self.height)
@@ -465,6 +467,26 @@ class MultiGridEnv(gym.Env):
         return self.grid.__str__()
 
     def step(self, actions):
+
+        def test_integrity(title=''):
+            agent_locs = [[] for _ in range(len(self.agents))]
+            for i in range(self.grid.width):
+                for j in range(self.grid.height):
+                    x = self.grid.get(i,j)
+                    for k,agent in enumerate(self.agents):
+                        if x==agent:
+                            agent_locs[k].append(('top', (i,j)))
+                        if hasattr(x, 'agents') and agent in x.agents:
+                            agent_locs[k].append(('stacked', (i,j)))
+            if not all([len(x)==1 for x in agent_locs]):
+                print(f"{title} > Failed integrity test!")
+                for a, al in zip(self.agents, agent_locs):
+                    print(" > ", a.color,'-', al)
+                import pdb; pdb.set_trace()
+
+        
+        # test_integrity("Beginning of step!")
+
         try:
             assert len(actions) == len(self.agents)
         except:
@@ -475,13 +497,21 @@ class MultiGridEnv(gym.Env):
 
         wasteds = []
 
-        for agent_no, (agent, action) in enumerate(zip(self.agents, actions)):
+        iter_agents = list(enumerate(zip(self.agents, actions)))
+        iter_order = np.arange(len(iter_agents))
+        self.np_random.shuffle(iter_order)
+        # print()
+        for shuffled_ix in iter_order:
+            agent_no, (agent, action) = iter_agents[shuffled_ix]
+            # print(f"Moving {agent.color} agent. (no {agent_no})")
             wasted = False
+
+
             if agent.active:
 
-                cur_pos = agent.pos
+                cur_pos = agent.pos[:]
                 cur_cell = self.grid.get(*cur_pos)
-                fwd_pos = agent.front_pos
+                fwd_pos = agent.front_pos[:]
                 fwd_cell = self.grid.get(*fwd_pos)
 
                 # Rotate left
@@ -494,22 +524,40 @@ class MultiGridEnv(gym.Env):
 
                 # Move forward
                 elif action == agent.actions.forward:
+                    # should_pause = True
                     # Under these conditions, the agent can move forward.
-                    if (fwd_cell is None) or fwd_cell.can_overlap():
+                    can_move = fwd_cell is None or fwd_cell.can_overlap()
+                    if self.ghost_mode is False and isinstance(fwd_cell, GridAgent):
+                        can_move = False
+                    if can_move:
 
-                        # Move the agent to the forward cell
-                        agent.pos = fwd_pos
-
+                        # Add agent to new cell
                         if fwd_cell is None:
                             self.grid.set(*fwd_pos, agent)
-                        elif fwd_cell.can_overlap():
-                            fwd_cell.agent = agent
+                            agent.pos = fwd_pos
+                        else:
+                            fwd_cell.agents.append(agent)
+                            agent.pos = fwd_pos
 
+                        # Remove agent from old cell
                         if cur_cell == agent:
                             self.grid.set(*cur_pos, None)
                         else:
-                            cur_cell.agent = None
-                    else:
+                            assert cur_cell.can_overlap()
+                            cur_cell.agents.remove(agent)
+
+                        # Add agent's agents to old cell
+                        for left_behind in agent.agents:
+                            cur_obj = self.grid.get(*cur_pos)
+                            if cur_obj is None:
+                                self.grid.set(*cur_pos, left_behind)
+                            elif cur_obj.can_overlap():
+                                cur_obj.agents.append(left_behind)
+                            else: # How was "agent" there in teh first place?
+                                raise ValueError("?!?!?!")
+                        agent.agents = []
+                        # test_integrity(f"After moving {agent.color} guy")
+
                         wasted = True
 
                     if isinstance(fwd_cell, Goal):  # No extra wasting logic
@@ -518,7 +566,8 @@ class MultiGridEnv(gym.Env):
                         else:
                             rewards[agent_no] += fwd_cell.reward 
                         agent.done = True
-                        fwd_cell.agent = None
+                        # fwd_cell.agents.remove(agent)
+                        # fwd_cell.agent = None
 
                     if isinstance(fwd_cell, Lava):
                         agent.done = True
@@ -558,12 +607,27 @@ class MultiGridEnv(gym.Env):
                     raise ValueError(f"Environment can't handle action {action}.")
             wasteds.append(wasted)
 
+        # test_integrity("After acting")
+
+
         if self.step_count >= self.max_steps:
             dones = [True for agent in self.agents]
         else:
             dones = []
             for agent in self.agents:
                 if agent.done and self.respawn:
+                    resting_place_obj = self.grid.get(*agent.pos)
+                    if resting_place_obj == agent:
+                        if agent.agents:
+                            self.grid.set(*agent.pos, agent.agents[0])
+                            agent.agents[0].agents += agent.agents[1:]
+                        else:
+                            self.grid.set(*agent.pos, None)
+                    else:
+                        resting_place_obj.agents.remove(agent)
+                        resting_place_obj.agents += agent.agents[:]
+                        agent.agents = []
+                            
                     agent.reset()
                     self.place_agent(agent, **self.agent_spawn_kwargs)
                 dones.append(agent.done)
@@ -577,6 +641,7 @@ class MultiGridEnv(gym.Env):
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
 
         wasteds = np.array(wasteds, dtype=np.bool)
+
 
         return obs, rewards, done, wasteds
 
