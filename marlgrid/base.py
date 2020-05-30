@@ -1,14 +1,13 @@
 # Multi-agent gridworld.
 # Based on MiniGrid: https://github.com/maximecb/gym-minigrid.
 
-
 import gym
 import numpy as np
 import gym_minigrid
 from enum import IntEnum
 import math
 
-from .objects import Wall, Goal, Lava, GridAgent
+from .objects import WorldObj, Wall, Goal, Lava, GridAgent, BonusTile
 from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
 
 TILE_PIXELS = 32
@@ -56,6 +55,27 @@ class ObjectRegistry:
     def obj_of_key(self, key):
         return self.key_to_obj_map[key]
 
+def rotate_grid(grid, rot_k):        
+    rot_k = rot_k % 4
+    # tgt = np.rot90(sub_grid.grid, k=-rot_k)
+    # ^^ Old style. rot90 was the slowest part of the entire rendering process.
+    # if self.orientation%4 == 3:
+    #     img[ymin:ymax, xmin:xmax, :] = tile_img[:,::-1].transpose(1,0,2)
+    # elif self.orientation%4 == 1:
+    #     img[ymin:ymax, xmin:xmax, :] = tile_img[::-1,:].transpose(1,0,2)
+    # elif self.orientation%4 == 2:
+    #     img[ymin:ymax, xmin:xmax, :] = tile_img[::-1,::-1]
+    # else:
+    #     img[ymin:ymax, xmin:xmax, :] = tile_img
+    if rot_k==3:
+        return np.moveaxis(grid[:,::-1], 0, 1)
+    elif rot_k==1:
+        return np.moveaxis(grid[::-1,:], 0, 1)
+    elif rot_k==2:
+        return grid[::-1,::-1]
+    else:
+        return grid
+
 
 class MultiGrid:
 
@@ -86,10 +106,11 @@ class MultiGrid:
 
     def rotate_left(self, k=1):
         return self.__class__(
-            np.rot90(self.grid, k=k),
+            rotate_grid(self.grid, rot_k=k), # np.rot90(self.grid, k=k),
             obj_reg=self.obj_reg,
             orientation=(self.orientation - k) % 4,
         )
+
 
     def slice(self, topX, topY, width, height, rot_k=0):
         """
@@ -111,15 +132,7 @@ class MultiGrid:
             x_offset : x_max - x_min + x_offset, y_offset : y_max - y_min + y_offset
         ] = self.grid[x_min:x_max, y_min:y_max]
 
-        rot_k = rot_k % 4
-        # tgt = np.rot90(sub_grid.grid, k=-rot_k)
-        # ^^ Old style. rot90 was the slowest part of the entire rendering process.
-        if rot_k==3:
-            sub_grid.grid = sub_grid.grid[:,::-1].T
-        elif rot_k==1:
-            sub_grid.grid = sub_grid.grid[::-1,:].T
-        elif rot_k==2:
-            sub_grid.grid = sub_grid.grid[::-1,::-1]
+        sub_grid.grid = rotate_grid(sub_grid.grid, rot_k)
 
         sub_grid.width, sub_grid.height = sub_grid.grid.shape
 
@@ -201,11 +214,12 @@ class MultiGrid:
         grid = cls((width, height))
 
     def process_vis(grid, agent_pos):
+        # print(f"Agent pos is {agent_pos}")
         mask = np.zeros_like(grid.grid, dtype=np.bool)
         mask[agent_pos[0], agent_pos[1]] = True
 
         for j in reversed(range(0, grid.height)):
-            for i in range(0, grid.width - 1):
+            for i in range(agent_pos[0], grid.width):
                 if not mask[i, j]:
                     continue
 
@@ -213,30 +227,30 @@ class MultiGrid:
                 if cell and not cell.see_behind():
                     continue
 
-                mask[i + 1, j] = True
+                if i < grid.width - 1:
+                    mask[i + 1, j] = True
                 if j > 0:
-                    mask[i + 1, j - 1] = True
                     mask[i, j - 1] = True
+                    if i < grid.width - 1:
+                        mask[i + 1, j - 1] = True
 
-            for i in reversed(range(1, grid.width)):
+            for i in reversed(range(0, agent_pos[0]+1)):
                 if not mask[i, j]:
                     continue
 
                 cell = grid.get(i, j)
                 if cell and not cell.see_behind():
                     continue
-
-                mask[i - 1, j] = True
+                
+                if i > 0:
+                    mask[i - 1, j] = True
                 if j > 0:
-                    mask[i - 1, j - 1] = True
                     mask[i, j - 1] = True
-
-        for j in range(0, grid.height):
-            for i in range(0, grid.width):
-                if not mask[i, j]:
-                    grid.set(i, j, None)
+                    if i > 0:
+                        mask[i - 1, j - 1] = True
 
         return mask
+        
 
     @classmethod
     def render_tile(cls, obj, highlight=False, tile_size=TILE_PIXELS, subdivs=3):
@@ -246,7 +260,7 @@ class MultiGrid:
                 highlight,
             )
         else:
-            key = (tile_size, highlight, *obj.encode())
+            key = (tile_size, highlight, obj.__class__.__name__, *obj.encode())
 
         if key in cls.tile_cache:
             img = cls.tile_cache[key]
@@ -271,22 +285,25 @@ class MultiGrid:
 
         return img
 
-    def render(self, tile_size, highlight_mask=None):
-
-        if highlight_mask is None:
-            highlight_mask = np.zeros(shape=(self.width, self.height), dtype=np.bool)
-
+    def render(self, tile_size, highlight_mask=None, visible_mask=None):
         width_px = self.width * tile_size
         height_px = self.height * tile_size
 
-        img = np.zeros(shape=(height_px, width_px, 3), dtype=np.uint8)
+        img = np.zeros(shape=(height_px, width_px, 3), dtype=np.uint8)+100
 
         for j in range(0, self.height):
             for i in range(0, self.width):
+                if visible_mask is not None and not visible_mask[i,j]:
+                    continue
                 obj = self.get(i, j)
 
                 tile_img = MultiGrid.render_tile(
-                    obj, highlight=highlight_mask[i, j], tile_size=tile_size
+                    obj,
+                    highlight=(
+                        highlight_mask[i, j] if (highlight_mask is not None )
+                        else False
+                    ),
+                    tile_size=tile_size
                 )
 
                 ymin = j * tile_size
@@ -294,17 +311,7 @@ class MultiGrid:
                 xmin = i * tile_size
                 xmax = (i + 1) * tile_size
 
-                # Old style, slower than flip+transpose:
-                # img[ymin:ymax, xmin:xmax, :] = np.rot90(tile_img, -self.orientation)
-
-                if self.orientation%4 == 3:
-                    img[ymin:ymax, xmin:xmax, :] = tile_img[:,::-1].transpose(1,0,2)
-                elif self.orientation%4 == 1:
-                    img[ymin:ymax, xmin:xmax, :] = tile_img[::-1,:].transpose(1,0,2)
-                elif self.orientation%4 == 2:
-                    img[ymin:ymax, xmin:xmax, :] = tile_img[::-1,::-1]
-                else:
-                    img[ymin:ymax, xmin:xmax, :] = tile_img
+                img[ymin:ymax, xmin:xmax, :] = rotate_grid(tile_img, -self.orientation)
 
         return img
 
@@ -323,8 +330,8 @@ class MultiGridEnv(gym.Env):
         seed=1337,
         respawn=False,
         ghost_mode=True,
+        agent_spawn_kwargs = {}
     ):
-
         if grid_size is not None:
             assert width == None and height == None
             width, height = grid_size, grid_size
@@ -361,7 +368,7 @@ class MultiGridEnv(gym.Env):
         self.see_through_walls = see_through_walls
         self.reward_decay = reward_decay
         self.seed(seed=seed)
-        self.agent_spawn_kwargs = {}
+        self.agent_spawn_kwargs = agent_spawn_kwargs
         self.ghost_mode = ghost_mode
 
         # self.reset()
@@ -401,7 +408,7 @@ class MultiGridEnv(gym.Env):
         idx = self._rand_int(0, len(lst))
         return lst[idx]
 
-    def reset(self):
+    def reset(self, **kwargs):
         for agent in self.agents:
             agent.agents = []
             agent.reset()
@@ -414,10 +421,12 @@ class MultiGridEnv(gym.Env):
             # Make sure the agent doesn't overlap with an object
             start_cell = self.grid.get(*agent.pos)
             # assert start_cell is None or start_cell.can_overlap()
+            if hasattr(agent, 'bonus_state'):
+                del agent.bonus_state
             assert start_cell is agent
 
         self.step_count = 0
-
+        # print(self)
         obs = self.gen_obs()
         return obs
 
@@ -430,38 +439,35 @@ class MultiGridEnv(gym.Env):
 
         # Process occluders and visibility
         # Note that this incurs some performance cost
-        if not self.see_through_walls:
+        if self.see_through_walls:
+            vis_mask = None
+        else:
             vis_mask = grid.process_vis(
                 agent_pos=(agent.view_size // 2, agent.view_size - 1)
             )
-        else:
-            vis_mask = np.ones(shape=(grid.width, grid.height), dtype=np.bool)
 
         return grid, vis_mask
 
     def gen_agent_obs(self, agent):
-        grid, vis_mask = self.gen_obs_grid(agent)
-        return grid.render(tile_size=agent.view_tile_size)  # ,highlight_mask=~vis_mask)
-
-    def gen_obs(self):
         """
         Generate the agent's view (partially observable, low-resolution encoding)
         """
-        # obs_list = []
-        # for agent in self.agents:
-        #     grid, vis_mask = self.gen_obs_grid(agent)
+        grid, vis_mask = self.gen_obs_grid(agent)
+        grid_image = grid.render(tile_size=agent.view_tile_size, visible_mask=vis_mask)
+        if agent.observation_style=='image':
+            return grid_image
+        else:
+            ret = {'pov': grid_image}
+            if agent.observe_rewards:
+                ret['reward'] = getattr(agent, 'step_reward', 0)
+            if agent.observe_position:
+                ret['position'] = np.array(agent.pos)/np.array([self.width, self.height], dtype=np.float)
+            if agent.observe_orientation:
+                ret['orientation'] = agent.dir
+            return ret
 
-        #     obs_list.append({
-        #         'image': grid.encode(vis_mask),
-        #         'direction': agent.dir,
-        #         'mission': agent.mission
-        #     })
-
+    def gen_obs(self):
         return [self.gen_agent_obs(agent) for agent in self.agents]
-        # return obs_list
-
-    # def get_obs_render(self, obs, agent, tile_size=TILE_PIXELS//2):
-    #     grid, vis_mask = MultiGrid.decode(obs)
 
     def __str__(self):
         return self.grid.__str__()
@@ -469,6 +475,11 @@ class MultiGridEnv(gym.Env):
     def step(self, actions):
 
         def test_integrity(title=''):
+            '''
+            This function checks whether each agent is present in the grid in exactly one place.
+            This is particularly helpful for validating the world state when ghost_mode=False and
+            agents can stack.
+            '''
             agent_locs = [[] for _ in range(len(self.agents))]
             for i in range(self.grid.width):
                 for j in range(self.grid.height):
@@ -495,17 +506,12 @@ class MultiGridEnv(gym.Env):
 
         self.step_count += 1
 
-        wasteds = []
-
         iter_agents = list(enumerate(zip(self.agents, actions)))
         iter_order = np.arange(len(iter_agents))
         self.np_random.shuffle(iter_order)
-        # print()
         for shuffled_ix in iter_order:
             agent_no, (agent, action) = iter_agents[shuffled_ix]
-            # print(f"Moving {agent.color} agent. (no {agent_no})")
-            wasted = False
-
+            agent.step_reward = 0
 
             if agent.active:
 
@@ -524,13 +530,12 @@ class MultiGridEnv(gym.Env):
 
                 # Move forward
                 elif action == agent.actions.forward:
-                    # should_pause = True
-                    # Under these conditions, the agent can move forward.
+                    # Under the follow conditions, the agent can move forward.
                     can_move = fwd_cell is None or fwd_cell.can_overlap()
                     if self.ghost_mode is False and isinstance(fwd_cell, GridAgent):
                         can_move = False
-                    if can_move:
 
+                    if can_move:
                         # Add agent to new cell
                         if fwd_cell is None:
                             self.grid.set(*fwd_pos, agent)
@@ -555,23 +560,27 @@ class MultiGridEnv(gym.Env):
                                 cur_obj.agents.append(left_behind)
                             else: # How was "agent" there in teh first place?
                                 raise ValueError("?!?!?!")
-                        agent.agents = []
-                        # test_integrity(f"After moving {agent.color} guy")
 
-                        wasted = True
+                        # After moving, the agent shouldn't contain any other agents.
+                        agent.agents = [] 
+                        # test_integrity(f"After moving {agent.color} fellow")
 
-                    if isinstance(fwd_cell, Goal):  # No extra wasting logic
+                    # Rewards can be got iff. fwd_cell has a "get_reward" method
+                    if hasattr(fwd_cell, 'get_reward'):
                         if bool(self.reward_decay):
-                            rewards[agent_no] += fwd_cell.reward * (1.0-0.9*(self.step_count/self.max_steps))
+                            rewards[agent_no] += fwd_cell.get_reward(agent) * (1.0-0.9*(self.step_count/self.max_steps))
                         else:
-                            rewards[agent_no] += fwd_cell.reward 
-                        agent.done = True
+                            rewards[agent_no] += fwd_cell.get_reward(agent)
+                        # agent.done = True
                         # fwd_cell.agents.remove(agent)
                         # fwd_cell.agent = None
 
-                    if isinstance(fwd_cell, Lava):
+                    if isinstance(fwd_cell, (Lava, Goal)):
                         agent.done = True
 
+
+                # TODO: verify pickup/drop/toggle logic in an environment that 
+                #  supports the relevant interactions.
                 # Pick up an object
                 elif action == agent.actions.pickup:
                     if fwd_cell and fwd_cell.can_pickup():
@@ -580,7 +589,7 @@ class MultiGridEnv(gym.Env):
                             agent.carrying.cur_pos = np.array([-1, -1])
                             self.grid.set(*fwd_pos, None)
                     else:
-                        wasted = True
+                        pass
 
                 # Drop an object
                 elif action == agent.actions.drop:
@@ -589,23 +598,23 @@ class MultiGridEnv(gym.Env):
                         agent.carrying.cur_pos = fwd_pos
                         agent.carrying = None
                     else:
-                        wasted = True
+                        pass
 
                 # Toggle/activate an object
                 elif action == agent.actions.toggle:
                     if fwd_cell:
                         wasted = bool(fwd_cell.toggle(agent, fwd_pos))
                     else:
-                        wasted = True
+                        pass
 
                 # Done action (not used by default)
                 elif action == agent.actions.done:
                     # dones[agent_no] = True
-                    wasted = True
+                    pass
 
                 else:
                     raise ValueError(f"Environment can't handle action {action}.")
-            wasteds.append(wasted)
+            agent.step_reward = rewards[agent_no]
 
         # test_integrity("After acting")
 
@@ -640,10 +649,10 @@ class MultiGridEnv(gym.Env):
 
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
 
-        wasteds = np.array(wasteds, dtype=np.bool)
+        for agent, rew in zip(self.agents, rewards):
+            assert agent.step_reward==rew
 
-
-        return obs, rewards, done, wasteds
+        return obs, rewards, done, {}
 
     @property
     def agent_positions(self):
@@ -728,17 +737,24 @@ class MultiGridEnv(gym.Env):
             from gym.envs.classic_control.rendering import SimpleImageViewer
 
             self.window = SimpleImageViewer()
-            # self.window.show(block=False)
 
         # Compute which cells are visible to the agent
         highlight_mask = np.full((self.width, self.height), False, dtype=np.bool)
         for agent in self.agents:
             xlow, ylow, xhigh, yhigh = agent.get_view_exts()
             if agent.active:
-                highlight_mask[
-                    max(0, xlow) : min(self.grid.width, xhigh),
-                    max(0, ylow) : min(self.grid.height, yhigh),
-                ] = True
+                dxlow, dylow = max(0, 0-xlow), max(0, 0-ylow)
+                dxhigh, dyhigh = max(0, xhigh-self.grid.width), max(0, yhigh-self.grid.height)
+                # xlow, xhigh = max(0, xlow), min(self.grid.width, xhigh)
+                # ylow, yhigh = max(0, ylow), min(self.grid.height, yhigh)
+                if self.see_through_walls:
+                    highlight_mask[xlow+dxlow:xhigh-dxhigh, ylow+dylow:yhigh-dyhigh] = True
+                else:
+                    a,b = self.gen_obs_grid(agent)
+                    highlight_mask[xlow+dxlow:xhigh-dxhigh, ylow+dylow:yhigh-dyhigh] |= (
+                        rotate_grid(b, a.orientation)[dxlow:(xhigh-xlow)-dxhigh, dylow:(yhigh-ylow)-dyhigh]
+                    )
+
 
         # Render the whole grid
         img = self.grid.render(
@@ -758,6 +774,8 @@ class MultiGridEnv(gym.Env):
                 views = []
                 for row_no in range(col_count):
                     tmp = self.gen_agent_obs(self.agents[agent_no])
+                    if isinstance(tmp, dict) and 'pov' in tmp:
+                        tmp = tmp['pov']
                     if rescale_factor is None:
                         rescale_factor = img.shape[0] // (
                             min(3, col_count) * tmp.shape[1]

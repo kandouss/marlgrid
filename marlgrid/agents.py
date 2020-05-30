@@ -15,18 +15,46 @@ class InteractiveGridAgent(GridAgent):
         toggle = 5  # Toggle/activate an object
         done = 6  # Done completing task
 
-    def __init__(self, view_size=7, view_tile_size=5, **kwargs):
+    def __init__(
+            self,
+            view_size=7,
+            view_tile_size=5,
+            observation_style='image',
+            observe_rewards=False,
+            observe_position=False,
+            observe_orientation=False,
+            **kwargs):
         super().__init__(**kwargs)
 
         self.view_size = view_size
         self.view_tile_size = view_tile_size
+        self.observation_style = observation_style
+        self.observe_rewards = observe_rewards
+        self.observe_position = observe_position
+        self.observe_orientation = observe_orientation
+        self.init_kwargs = kwargs
 
-        self.observation_space = gym.spaces.Box(
+        image_space = gym.spaces.Box(
             low=0,
             high=255,
             shape=(view_tile_size * view_size, view_tile_size * view_size, 3),
             dtype="uint8",
         )
+        if observation_style == 'image':
+            self.observation_space = image_space
+        elif observation_style == 'rich':
+            obs_space = {
+                'pov': image_space,
+            }
+            if self.observe_rewards:
+                obs_space['reward'] = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(), dtype=np.float32)
+            if self.observe_position:
+                obs_space['position'] = gym.spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)
+            if self.observe_orientation:
+                obs_space['orientation'] = gym.spaces.Discrete(n=4)
+            self.observation_space = gym.spaces.Dict(obs_space)
+        else:
+            raise ValueError("InteractiveAgent kwarg 'observation_style' must be one of 'image', 'rich'.")
 
         self.action_space = gym.spaces.Discrete(len(self.actions))
 
@@ -38,6 +66,17 @@ class InteractiveGridAgent(GridAgent):
         }
 
         self.reset()
+
+    def clone(self):
+        ret =  self.__class__(
+            view_size = self.view_size,
+            view_tile_size = self.view_tile_size,
+            observation_style = self.observation_style,
+            observe_rewards = self.observe_rewards,
+            observe_orientation = self.observe_orientation,
+            **self.init_kwargs
+        )
+        return ret
 
     def reset(self):
         self.done = False
