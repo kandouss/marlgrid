@@ -19,17 +19,17 @@ class ClutteredMultiGrid(MultiGridEnv):
 
         self.randomize_goal = randomize_goal
 
-        self.reset()
+        # self.reset()
 
 
     def _gen_grid(self, width, height):
         self.grid = MultiGrid((width, height))
         self.grid.wall_rect(0, 0, width, height)
-        if self.randomize_goal:
+        if getattr(self, 'randomize_goal', True):
             self.place_obj(Goal(color="green", reward=1), max_tries=100)
         else:
             self.put_obj(Goal(color="green", reward=1), width - 2, height - 2)
-        for _ in range(self.n_clutter):
+        for _ in range(getattr(self, 'n_clutter', 0)):
             self.place_obj(Wall(), max_tries=100)
 
         self.agent_spawn_kwargs = {}
