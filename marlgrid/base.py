@@ -345,18 +345,10 @@ class MultiGridEnv(gym.Env):
         self.respawn = respawn
 
         self.action_space = gym.spaces.Tuple(
-            tuple(gym.spaces.Discrete(len(agent.actions)) for agent in self.agents)
+            [agent.action_space for agent in self.agents]
         )
         self.observation_space = gym.spaces.Tuple(
-            tuple(
-                gym.spaces.Box(
-                    low=0,
-                    high=255,
-                    shape=(agent.view_size, agent.view_size, 3),
-                    dtype="uint8",
-                )
-                for agent in self.agents
-            )
+            [agent.observation_space for agent in self.agents]
         )
         self.reward_range = [(0, 1) for _ in range(len(self.agents))]
 
@@ -371,7 +363,7 @@ class MultiGridEnv(gym.Env):
         self.agent_spawn_kwargs = agent_spawn_kwargs
         self.ghost_mode = ghost_mode
 
-        # self.reset()
+        self.reset()
 
     def seed(self, seed=1337):
         # Seed the random number generator
@@ -502,6 +494,7 @@ class MultiGridEnv(gym.Env):
             assert len(actions) == len(self.agents)
         except:
             print("FAILED WITH ACTIONS", actions)
+
         rewards = np.zeros((len(self.agents,)), dtype=np.float)
 
         self.step_count += 1
@@ -745,8 +738,6 @@ class MultiGridEnv(gym.Env):
             if agent.active:
                 dxlow, dylow = max(0, 0-xlow), max(0, 0-ylow)
                 dxhigh, dyhigh = max(0, xhigh-self.grid.width), max(0, yhigh-self.grid.height)
-                # xlow, xhigh = max(0, xlow), min(self.grid.width, xhigh)
-                # ylow, yhigh = max(0, ylow), min(self.grid.height, yhigh)
                 if self.see_through_walls:
                     highlight_mask[xlow+dxlow:xhigh-dxhigh, ylow+dylow:yhigh-dyhigh] = True
                 else:

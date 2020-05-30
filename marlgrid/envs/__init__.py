@@ -23,12 +23,13 @@ def register_marl_env(
     done_condition="all",
     env_kwargs={},
 ):
-    colors = ["red", "blue", "purple", "orange", "olive"]
+    colors = ["red", "blue", "purple", "orange", "olive", "pink"]
     assert n_agents <= len(colors)
 
     class RegEnv(env_class):
-        def __init__(self):
-            super().__init__(
+        def __new__(cls):
+            instance = super(env_class, RegEnv).__new__(env_class)
+            instance.__init__(
                 agents=[
                     InteractiveGridAgent(color=c, view_size=view_size, view_tile_size=8)
                     for c in colors[:n_agents]
@@ -37,6 +38,7 @@ def register_marl_env(
                 done_condition=done_condition,
                 **env_kwargs,
             )
+            return instance
 
     env_class_name = f"env_{len(registered_envs)}"
     setattr(this_module, env_class_name, RegEnv)
