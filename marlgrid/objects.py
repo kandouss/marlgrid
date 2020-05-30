@@ -22,11 +22,11 @@ COLORS = {
     "worst": np.array([74, 65, 42]),  # https://en.wikipedia.org/wiki/Pantone_448_C
     "pink": np.array([255, 0, 189]),
 }
+
 # Used to map colors to integers
 COLOR_TO_IDX = dict({v: k for k, v in enumerate(COLORS.keys())})
 
 OBJECT_TYPE_REGISTRY = []
-
 
 class MetaRegistry(type):
     def __new__(meta, name, bases, class_dict):
@@ -34,10 +34,10 @@ class MetaRegistry(type):
         if name not in OBJECT_TYPE_REGISTRY:
             OBJECT_TYPE_REGISTRY.append(cls)
 
-        def get_recursive_subclasses(x):
+        def get_recursive_subclasses():
             return OBJECT_TYPE_REGISTRY
 
-        cls.recursive_subclasses = get_recursive_subclasses
+        cls.recursive_subclasses = staticmethod(get_recursive_subclasses)
         return cls
 
 
@@ -76,20 +76,20 @@ class WorldObj(metaclass=MetaRegistry):
         return False
 
     def encode(self, str_class=False):
-        if len(self.agents)>0:
-            return self.agents[0].encode(str_class=str_class)
-        else:
-            if str_class:
-                return (self.type, self.color, self.state)
-            else:
-                # return (WorldObj.__subclasses__().index(self.__class__), self.color, self.state)
-                return (
-                    self.recursive_subclasses().index(self.__class__),
-                    self.color
-                    if isinstance(self.color, int)
-                    else COLOR_TO_IDX[self.color],
-                    self.state,
-                )
+        # Note 5/29/20: Commented out the condition below; was causing agents to 
+        #  render incorrectly in partial views. In particular, if there were N red agents,
+        #  agents {i != k} would render as blue (rather than red) in agent k's partial view.
+        # # if len(self.agents)>0:
+        # #     return self.agents[0].encode(str_class=str_class)
+        # # else:
+        enc_class = self.type if bool(str_class) else self.recursive_subclasses().index(self.__class__)
+        enc_color = self.color if isinstance(self.color, int) else COLOR_TO_IDX[self.color]
+        
+        return (
+                enc_class,
+                enc_color,
+                self.state,
+            )
 
     def describe(self):
         return f"Obj: {self.type}({self.color}, {self.state})"
@@ -97,14 +97,14 @@ class WorldObj(metaclass=MetaRegistry):
     @classmethod
     def decode(cls, type, color, state):
         if isinstance(type, str):
-            cls_subclasses = {c.__name__: c for c in cls.__subclasses__()}
+            cls_subclasses = {c.__name__: c for c in cls.recursive_subclasses()}
             if type not in cls_subclasses:
                 raise ValueError(
                     f"Not sure how to construct a {cls} of (sub)type {type}"
                 )
             return cls_subclasses[type](color, state)
         elif isinstance(type, int):
-            subclass = cls.__subclasses__()[type]
+            subclass = cls.recursive_subclasses()[type]
             return subclass(color, state)
 
     def render(self, img):
@@ -118,7 +118,8 @@ class GridAgent(WorldObj):
     def __init__(self, *args, color='red', **kwargs):
         super().__init__(*args, **{'color':color, **kwargs})
         self.metadata = {
-            'color': color
+            'color': color,
+            # **kwargs,
         }
 
     @property
@@ -147,14 +148,55 @@ class GridAgent(WorldObj):
         fill_coords(img, tri_fn, COLORS[self.color])
 
 
-
-class BulkObj(WorldObj):
+class BulkObj(WorldObj, metaclass=MetaRegistry):
     def __hash__(self):
         return hash((self.__class__, self.color, self.state, tuple(self.agents)))
 
     def __eq__(self, other):
         return hash(self) == hash(other)
 
+class BonusTile(WorldObj):
+    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1, color='yellow', *args, **kwargs):
+        super().__init__(*args, **{'color': color, **kwargs, 'state': bonus_id})
+        self.reward = reward
+        self.penalty = penalty
+        self.n_bonus = n_bonus
+        self.bonus_id = bonus_id
+
+    def can_overlap(self):
+        return True
+
+    def str_render(self, dir=0):
+        return "BB"
+
+    def get_reward(self, agent):
+        # If the agent hasn't hit any bonus tiles, set its bonus state so that
+        #  it'll get a reward from hitting this tile.
+        first_bonus = False
+        if not hasattr(agent, 'bonus_state'):
+            agent.bonus_state = (self.bonus_id - 1) % self.n_bonus
+            first_bonus = True
+
+        state_before = agent.bonus_state
+
+        if agent.bonus_state == self.bonus_id:
+            # This is the last bonus tile the agent hit
+            rew = -np.abs(self.penalty)
+        elif (agent.bonus_state + 1)%self.n_bonus == self.bonus_id:
+            # The agent hit the previous bonus tile before this one
+            agent.bonus_state = self.bonus_id
+            # rew = agent.bonus_value
+            rew = self.reward
+        else:
+            # The agent hit any other bonus tile before this one
+            rew = -np.abs(self.penalty)
+        
+        state_after = agent.bonus_state
+        # print(f"    {self.bonus_id}/{self.n_bonus}: {state_before} -> {state_after}, rew={rew} {'(first)' if first_bonus else ''}")
+        return rew
+
+    def render(self, img):
+        fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
 
 class Goal(WorldObj):
     def __init__(self, reward, *args, **kwargs):
@@ -163,6 +205,9 @@ class Goal(WorldObj):
 
     def can_overlap(self):
         return True
+
+    def get_reward(self, agent):
+        return self.reward
 
     def str_render(self, dir=0):
         return "GG"
