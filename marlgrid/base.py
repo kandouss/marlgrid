@@ -311,7 +311,7 @@ class MultiGrid:
                 xmin = i * tile_size
                 xmax = (i + 1) * tile_size
 
-                img[ymin:ymax, xmin:xmax, :] = rotate_grid(tile_img, -self.orientation)
+                img[ymin:ymax, xmin:xmax, :] = rotate_grid(tile_img, self.orientation)
 
         return img
 
