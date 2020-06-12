@@ -156,12 +156,13 @@ class BulkObj(WorldObj, metaclass=MetaRegistry):
         return hash(self) == hash(other)
 
 class BonusTile(WorldObj):
-    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1, color='yellow', *args, **kwargs):
+    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1, initial_reward=True, color='yellow', *args, **kwargs):
         super().__init__(*args, **{'color': color, **kwargs, 'state': bonus_id})
         self.reward = reward
         self.penalty = penalty
         self.n_bonus = n_bonus
         self.bonus_id = bonus_id
+        self.initial_reward = initial_reward
 
     def can_overlap(self):
         return True
@@ -177,7 +178,7 @@ class BonusTile(WorldObj):
             agent.bonus_state = (self.bonus_id - 1) % self.n_bonus
             first_bonus = True
 
-        state_before = agent.bonus_state
+        # state_before = agent.bonus_state
 
         if agent.bonus_state == self.bonus_id:
             # This is the last bonus tile the agent hit
@@ -191,9 +192,13 @@ class BonusTile(WorldObj):
             # The agent hit any other bonus tile before this one
             rew = -np.abs(self.penalty)
         
-        state_after = agent.bonus_state
+        # state_after = agent.bonus_state
         # print(f"    {self.bonus_id}/{self.n_bonus}: {state_before} -> {state_after}, rew={rew} {'(first)' if first_bonus else ''}")
-        return rew
+
+        if first_bonus and not bool(self.initial_reward):
+            return 0
+        else:
+            return rew
 
     def render(self, img):
         fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
