@@ -7,7 +7,6 @@ from gym_minigrid.rendering import (
     rotate_fn,
 )
 
-
 # Map of color names to RGB values
 COLORS = {
     "red": np.array([255, 0, 0]),
@@ -81,6 +80,7 @@ class WorldObj(metaclass=MetaRegistry):
     def toggle(self, env, pos):
         return False
 
+
     def encode(self, str_class=False):
         # Note 5/29/20: Commented out the condition below; was causing agents to 
         #  render incorrectly in partial views. In particular, if there were N red agents,
@@ -125,7 +125,6 @@ class GridAgent(WorldObj):
         super().__init__(*args, **{'color':color, **kwargs})
         self.metadata = {
             'color': color,
-            # **kwargs,
         }
 
     @property
@@ -148,7 +147,6 @@ class GridAgent(WorldObj):
 
     def render(self, img):
         tri_fn = point_in_triangle((0.12, 0.19), (0.87, 0.50), (0.12, 0.81),)
-        # Rotate the agent based on its direction
         tri_fn = rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5 * np.pi * (self.dir))
         fill_coords(img, tri_fn, COLORS[self.color])
 
