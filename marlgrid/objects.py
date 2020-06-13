@@ -21,6 +21,8 @@ COLORS = {
     "grey": np.array([100, 100, 100]),
     "worst": np.array([74, 65, 42]),  # https://en.wikipedia.org/wiki/Pantone_448_C
     "pink": np.array([255, 0, 189]),
+    "white": np.array([255,255,255]),
+    "prestige": np.array([255,255,255]),
 }
 
 # Used to map colors to integers
@@ -55,6 +57,10 @@ class WorldObj(metaclass=MetaRegistry):
     @property
     def dir(self):
         return None
+
+    @property
+    def numeric_color(self):
+        return COLORS[self.color]
 
     @property
     def type(self):
@@ -142,7 +148,6 @@ class GridAgent(WorldObj):
 
     def render(self, img):
         tri_fn = point_in_triangle((0.12, 0.19), (0.87, 0.50), (0.12, 0.81),)
-
         # Rotate the agent based on its direction
         tri_fn = rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5 * np.pi * (self.dir))
         fill_coords(img, tri_fn, COLORS[self.color])
@@ -178,8 +183,6 @@ class BonusTile(WorldObj):
             agent.bonus_state = (self.bonus_id - 1) % self.n_bonus
             first_bonus = True
 
-        # state_before = agent.bonus_state
-
         if agent.bonus_state == self.bonus_id:
             # This is the last bonus tile the agent hit
             rew = -np.abs(self.penalty)
@@ -192,8 +195,6 @@ class BonusTile(WorldObj):
             # The agent hit any other bonus tile before this one
             rew = -np.abs(self.penalty)
         
-        # state_after = agent.bonus_state
-        # print(f"    {self.bonus_id}/{self.n_bonus}: {state_before} -> {state_after}, rew={rew} {'(first)' if first_bonus else ''}")
 
         if first_bonus and not bool(self.initial_reward):
             return 0

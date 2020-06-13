@@ -67,6 +67,25 @@ class InteractiveGridAgent(GridAgent):
 
         self.reset()
 
+    def render_post(self, tile):
+        blue = np.array([0,0,255])
+        red = np.array([255,0,0])
+
+        self.seen_colors = getattr(self, "seen_colors", [])
+        if self.color == 'prestige':
+            prestige_alpha = np.tanh(self.prestige/10.)
+            new_color = (
+                    prestige_alpha * blue +
+                    (1.-prestige_alpha) * red
+                ).astype(np.int)
+            grey_pixels = (np.diff(tile, axis=-1)==0).all(axis=-1)
+            # import pdb; pdb.set_trace()
+            alpha = tile[...,0].astype(np.uint16)[...,None]
+            tile = np.right_shift(alpha * new_color, 8).astype(np.uint8)
+            return tile
+        else:
+            return tile
+
     def clone(self):
         ret =  self.__class__(
             view_size = self.view_size,
@@ -78,11 +97,14 @@ class InteractiveGridAgent(GridAgent):
         )
         return ret
 
-    def reset(self):
+
+    def reset(self, new_episode=False):
         self.done = False
         self.pos = None
         self.carrying = None
         self.mission = ""
+        if new_episode:
+            self.prestige = 0
 
     def render(self, img):
         if not self.done:

@@ -250,39 +250,41 @@ class MultiGrid:
                         mask[i - 1, j - 1] = True
 
         return mask
-        
+    
+    # def highlight_tile(self):
+    @classmethod
+    def cache_render(cls, key, f, *args, **kwargs):
+        if key in cls.tile_cache:
+            return cls.tile_cache[key]
+        else:
+            img = f(*args, **kwargs)
+            cls.tile_cache[key] = img
+            return img
+
+    @classmethod
+    def empty_tile(cls, tile_size, subdivs):
+        img = np.zeros((tile_size*subdivs,tile_size*subdivs, 3), dtype=np.uint8)
+        fill_coords(img, point_in_rect(0, 0.031, 0, 1), (20, 20, 20))
+        fill_coords(img, point_in_rect(0, 1, 0, 0.031), (20, 20, 20))
+        return downsample(img, subdivs).astype(np.uint8)
+
+    @classmethod
+    def render_object(cls, obj, tile_size, subdivs):
+        img = np.zeros((tile_size*subdivs,tile_size*subdivs, 3), dtype=np.uint8)
+        obj.render(img)
+        return downsample(img, subdivs).astype(np.uint8)
 
     @classmethod
     def render_tile(cls, obj, highlight=False, tile_size=TILE_PIXELS, subdivs=3):
         if obj is None:
-            key = (
-                tile_size,
-                highlight,
-            )
+            img = cls.cache_render((tile_size, None), cls.empty_tile, tile_size, subdivs)
         else:
-            key = (tile_size, highlight, obj.__class__.__name__, *obj.encode())
-
-        if key in cls.tile_cache:
-            img = cls.tile_cache[key]
-        else:
-            img = np.zeros(
-                shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
-            )
-
-            # Draw the grid lines (top and left edges)
-            fill_coords(img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100))
-            fill_coords(img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100))
-
-            if obj != None:
-                obj.render(img)
-
-            if highlight:
-                highlight_img(img)
-
-            img = downsample(img, subdivs).astype(np.uint8)
-
-            cls.tile_cache[key] = img
-
+            img = cls.cache_render(
+                (tile_size, obj.__class__.__name__, *obj.encode()),
+                cls.render_object, obj, tile_size, subdivs
+            )[:]
+            if hasattr(obj, 'render_post'):
+                img = obj.render_post(img)
         return img
 
     def render(self, tile_size, highlight_mask=None, visible_mask=None):
@@ -299,10 +301,6 @@ class MultiGrid:
 
                 tile_img = MultiGrid.render_tile(
                     obj,
-                    highlight=(
-                        highlight_mask[i, j] if (highlight_mask is not None )
-                        else False
-                    ),
                     tile_size=tile_size
                 )
 
@@ -312,6 +310,11 @@ class MultiGrid:
                 xmax = (i + 1) * tile_size
 
                 img[ymin:ymax, xmin:xmax, :] = rotate_grid(tile_img, self.orientation)
+        
+        if highlight_mask is not None:
+            hm = np.kron(highlight_mask.T, np.full((tile_size, tile_size), 255, dtype=np.uint16)
+                )[...,None] # arcane magic.
+            img = np.right_shift(img.astype(np.uint16)*8+hm*2, 3).clip(0,255).astype(np.uint8)
 
         return img
 
@@ -403,7 +406,7 @@ class MultiGridEnv(gym.Env):
     def reset(self, **kwargs):
         for agent in self.agents:
             agent.agents = []
-            agent.reset()
+            agent.reset(new_episode=True)
 
         self._gen_grid(self.width, self.height)
 
@@ -560,10 +563,15 @@ class MultiGridEnv(gym.Env):
 
                     # Rewards can be got iff. fwd_cell has a "get_reward" method
                     if hasattr(fwd_cell, 'get_reward'):
+                        rwd = fwd_cell.get_reward(agent)
                         if bool(self.reward_decay):
-                            rewards[agent_no] += fwd_cell.get_reward(agent) * (1.0-0.9*(self.step_count/self.max_steps))
+                            rewards[agent_no] += rwd * (1.0-0.9*(self.step_count/self.max_steps))
                         else:
-                            rewards[agent_no] += fwd_cell.get_reward(agent)
+                            rewards[agent_no] += rwd
+
+                        agent.prestige += 1
+                        # import pdb; pdb.set_trace()
+
                         # agent.done = True
                         # fwd_cell.agents.remove(agent)
                         # fwd_cell.agent = None
