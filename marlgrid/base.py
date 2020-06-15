@@ -556,6 +556,8 @@ class MultiGridEnv(gym.Env):
                     if isinstance(fwd_cell, (Lava, Goal)):
                         agent.done = True
 
+                    agent.on_step(fwd_cell)
+
 
                 # TODO: verify pickup/drop/toggle logic in an environment that 
                 #  supports the relevant interactions.
@@ -764,7 +766,7 @@ class MultiGridEnv(gym.Env):
                             ((pad,pad),(pad,pad),(0,0)), constant_values=pad_grey))
                     agent_no += 1
 
-                col_width = min(img.shape[1]//2, max([v.shape[1] for v in views]))
+                col_width = min(img.shape[1]//2, max([v.shape[1] for v in views]))+pad
                 img_col = np.zeros((img.shape[0], col_width, 3), dtype=np.uint8)+pad_grey
                 for k, view in enumerate(views):
                     start_x = (k * img.shape[0]) // len(views)

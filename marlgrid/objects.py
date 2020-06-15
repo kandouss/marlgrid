@@ -159,13 +159,14 @@ class BulkObj(WorldObj, metaclass=MetaRegistry):
         return hash(self) == hash(other)
 
 class BonusTile(WorldObj):
-    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1, initial_reward=True, color='yellow', *args, **kwargs):
+    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1, initial_reward=True, reset_on_mistake=False, color='yellow', *args, **kwargs):
         super().__init__(*args, **{'color': color, **kwargs, 'state': bonus_id})
         self.reward = reward
         self.penalty = penalty
         self.n_bonus = n_bonus
         self.bonus_id = bonus_id
         self.initial_reward = initial_reward
+        self.reset_on_mistake = reset_on_mistake
 
     def can_overlap(self):
         return True
@@ -177,7 +178,7 @@ class BonusTile(WorldObj):
         # If the agent hasn't hit any bonus tiles, set its bonus state so that
         #  it'll get a reward from hitting this tile.
         first_bonus = False
-        if not hasattr(agent, 'bonus_state'):
+        if agent.bonus_state is None:
             agent.bonus_state = (self.bonus_id - 1) % self.n_bonus
             first_bonus = True
 
@@ -192,7 +193,9 @@ class BonusTile(WorldObj):
         else:
             # The agent hit any other bonus tile before this one
             rew = -np.abs(self.penalty)
-        
+
+        if self.reset_on_mistake:
+            agent.bonus_state = self.bonus_id
 
         if first_bonus and not bool(self.initial_reward):
             return 0

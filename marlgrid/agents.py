@@ -2,7 +2,7 @@ import gym
 import numpy as np
 from enum import IntEnum
 
-from .objects import GridAgent
+from .objects import GridAgent, BonusTile
 
 
 class InteractiveGridAgent(GridAgent):
@@ -23,6 +23,7 @@ class InteractiveGridAgent(GridAgent):
             observe_rewards=False,
             observe_position=False,
             observe_orientation=False,
+            prestige_beta=5.,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -33,6 +34,7 @@ class InteractiveGridAgent(GridAgent):
         self.observe_position = observe_position
         self.observe_orientation = observe_orientation
         self.init_kwargs = kwargs
+        self.prestige_beta = prestige_beta
 
         image_space = gym.spaces.Box(
             low=0,
@@ -73,7 +75,7 @@ class InteractiveGridAgent(GridAgent):
         red = np.array([255,0,0])
 
         if self.color == 'prestige':
-            prestige_alpha = np.tanh(self.prestige/10.)
+            prestige_alpha = np.tanh(self.prestige/self.prestige_beta)
             new_color = (
                     prestige_alpha * blue +
                     (1.-prestige_alpha) * red
@@ -86,16 +88,21 @@ class InteractiveGridAgent(GridAgent):
         else:
             return tile
 
-    # def clone(self):
-    #     ret =  self.__class__(
-    #         view_size = self.view_size,
-    #         view_tile_size = self.view_tile_size,
-    #         observation_style = self.observation_style,
-    #         observe_rewards = self.observe_rewards,
-    #         observe_orientation = self.observe_orientation,
-    #         **self.init_kwargs
-    #     )
-    #     return ret
+    def clone(self):
+        ret =  self.__class__(
+            view_size = self.view_size,
+            view_tile_size = self.view_tile_size,
+            observation_style = self.observation_style,
+            observe_rewards = self.observe_rewards,
+            observe_position = self.observe_position,
+            observe_orientation = self.observe_orientation,
+            **self.init_kwargs
+        )
+        return ret
+
+    def on_step(self, obj):
+        if isinstance(obj, BonusTile):
+            self.bonuses.append((obj.bonus_id, self.prestige))
 
     def reward(self, rew):
         if rew>0:
@@ -111,6 +118,7 @@ class InteractiveGridAgent(GridAgent):
         if new_episode:
             self.prestige = 0
             self.bonus_state = None
+            self.bonuses = []
 
     def render(self, img):
         if not self.done:
