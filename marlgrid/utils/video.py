@@ -141,7 +141,7 @@ class GridRecorder(gym.core.Wrapper):
         self.frames = None
         self.ptr = 0
         self.reset_count = 0
-        self.last_save = 0
+        self.last_save = -10000
         self.recording = False
         self.save_root = save_root
         self.save_videos = save_videos

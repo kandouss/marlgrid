@@ -1,9 +1,9 @@
 import gym
 import numpy as np
 from enum import IntEnum
+import warnings
 
-from .objects import GridAgent
-
+from .objects import GridAgent, BonusTile
 
 class InteractiveGridAgent(GridAgent):
     class actions(IntEnum):
@@ -23,6 +23,9 @@ class InteractiveGridAgent(GridAgent):
             observe_rewards=False,
             observe_position=False,
             observe_orientation=False,
+            restrict_actions=False,
+            hide_item_types=[],
+            prestige_beta=0.95,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -32,7 +35,15 @@ class InteractiveGridAgent(GridAgent):
         self.observe_rewards = observe_rewards
         self.observe_position = observe_position
         self.observe_orientation = observe_orientation
+        self.hide_item_types = hide_item_types
         self.init_kwargs = kwargs
+        self.restrict_actions = restrict_actions
+        self.prestige_beta = prestige_beta
+
+        if self.prestige_beta > 1:
+            # warnings.warn("prestige_beta must be between 0 and 1. Using default 0.99")
+            self.prestige_beta = 0.95
+            
 
         image_space = gym.spaces.Box(
             low=0,
@@ -56,16 +67,38 @@ class InteractiveGridAgent(GridAgent):
         else:
             raise ValueError("InteractiveAgent kwarg 'observation_style' must be one of 'image', 'rich'.")
 
-        self.action_space = gym.spaces.Discrete(len(self.actions))
-
+        if self.restrict_actions:
+            self.action_space = gym.spaces.Discrete(3)
+        else:
+            self.action_space = gym.spaces.Discrete(len(self.actions))
 
         self.metadata = {
             **self.metadata,
             'view_size': view_size,
             'view_tile_size': view_tile_size,
         }
+        self.reset(new_episode=True)
 
-        self.reset()
+    def render_post(self, tile):
+        if self.done:
+            return tile
+
+        blue = np.array([0,0,255])
+        red = np.array([255,0,0])
+
+        if self.color == 'prestige':
+            prestige_alpha = np.tanh(self.prestige)
+            new_color = (
+                    prestige_alpha * blue +
+                    (1.-prestige_alpha) * red
+                ).astype(np.int)
+            grey_pixels = (np.diff(tile, axis=-1)==0).all(axis=-1)
+
+            alpha = tile[...,0].astype(np.uint16)[...,None]
+            tile = np.right_shift(alpha * new_color, 8).astype(np.uint8)
+            return tile
+        else:
+            return tile
 
     def clone(self):
         ret =  self.__class__(
@@ -73,16 +106,31 @@ class InteractiveGridAgent(GridAgent):
             view_tile_size = self.view_tile_size,
             observation_style = self.observation_style,
             observe_rewards = self.observe_rewards,
+            observe_position = self.observe_position,
             observe_orientation = self.observe_orientation,
+            hide_item_types = self.hide_item_types,
+            restrict_actions = self.restrict_actions,
             **self.init_kwargs
         )
         return ret
 
-    def reset(self):
+    def on_step(self, obj):
+        if isinstance(obj, BonusTile):
+            self.bonuses.append((obj.bonus_id, self.prestige))
+        self.prestige *= self.prestige_beta
+
+    def reward(self, rew):
+        self.prestige = np.clip(self.prestige+rew, -1.0, 1.0)
+
+    def reset(self, new_episode=False):
         self.done = False
         self.pos = None
         self.carrying = None
         self.mission = ""
+        if new_episode:
+            self.prestige = 0
+            self.bonus_state = None
+            self.bonuses = []
 
     def render(self, img):
         if not self.done:

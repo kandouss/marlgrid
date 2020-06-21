@@ -7,7 +7,6 @@ from gym_minigrid.rendering import (
     rotate_fn,
 )
 
-
 # Map of color names to RGB values
 COLORS = {
     "red": np.array([255, 0, 0]),
@@ -21,6 +20,9 @@ COLORS = {
     "grey": np.array([100, 100, 100]),
     "worst": np.array([74, 65, 42]),  # https://en.wikipedia.org/wiki/Pantone_448_C
     "pink": np.array([255, 0, 189]),
+    "white": np.array([255,255,255]),
+    "prestige": np.array([255,255,255]),
+    "shadow": np.array([35,25,30]), # nice dark purpley color for cells agents can't see.
 }
 
 # Used to map colors to integers
@@ -57,6 +59,10 @@ class WorldObj(metaclass=MetaRegistry):
         return None
 
     @property
+    def numeric_color(self):
+        return COLORS[self.color]
+    
+    @property
     def type(self):
         return self.__class__.__name__
 
@@ -84,12 +90,7 @@ class WorldObj(metaclass=MetaRegistry):
         # # else:
         enc_class = self.type if bool(str_class) else self.recursive_subclasses().index(self.__class__)
         enc_color = self.color if isinstance(self.color, int) else COLOR_TO_IDX[self.color]
-        
-        return (
-                enc_class,
-                enc_color,
-                self.state,
-            )
+        return (enc_class, enc_color, self.state)
 
     def describe(self):
         return f"Obj: {self.type}({self.color}, {self.state})"
@@ -119,12 +120,15 @@ class GridAgent(WorldObj):
         super().__init__(*args, **{'color':color, **kwargs})
         self.metadata = {
             'color': color,
-            # **kwargs,
         }
 
     @property
     def dir(self):
         return self.state % 4
+
+    @property
+    def type(self):
+        return 'Agent'
 
     @dir.setter
     def dir(self, dir):
@@ -142,8 +146,6 @@ class GridAgent(WorldObj):
 
     def render(self, img):
         tri_fn = point_in_triangle((0.12, 0.19), (0.87, 0.50), (0.12, 0.81),)
-
-        # Rotate the agent based on its direction
         tri_fn = rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5 * np.pi * (self.dir))
         fill_coords(img, tri_fn, COLORS[self.color])
 
@@ -156,12 +158,14 @@ class BulkObj(WorldObj, metaclass=MetaRegistry):
         return hash(self) == hash(other)
 
 class BonusTile(WorldObj):
-    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1, color='yellow', *args, **kwargs):
+    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1, initial_reward=True, reset_on_mistake=False, color='yellow', *args, **kwargs):
         super().__init__(*args, **{'color': color, **kwargs, 'state': bonus_id})
         self.reward = reward
         self.penalty = penalty
         self.n_bonus = n_bonus
         self.bonus_id = bonus_id
+        self.initial_reward = initial_reward
+        self.reset_on_mistake = reset_on_mistake
 
     def can_overlap(self):
         return True
@@ -173,11 +177,9 @@ class BonusTile(WorldObj):
         # If the agent hasn't hit any bonus tiles, set its bonus state so that
         #  it'll get a reward from hitting this tile.
         first_bonus = False
-        if not hasattr(agent, 'bonus_state'):
+        if agent.bonus_state is None:
             agent.bonus_state = (self.bonus_id - 1) % self.n_bonus
             first_bonus = True
-
-        state_before = agent.bonus_state
 
         if agent.bonus_state == self.bonus_id:
             # This is the last bonus tile the agent hit
@@ -190,10 +192,14 @@ class BonusTile(WorldObj):
         else:
             # The agent hit any other bonus tile before this one
             rew = -np.abs(self.penalty)
-        
-        state_after = agent.bonus_state
-        # print(f"    {self.bonus_id}/{self.n_bonus}: {state_before} -> {state_after}, rew={rew} {'(first)' if first_bonus else ''}")
-        return rew
+
+        if self.reset_on_mistake:
+            agent.bonus_state = self.bonus_id
+
+        if first_bonus and not bool(self.initial_reward):
+            return 0
+        else:
+            return rew
 
     def render(self, img):
         fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
