@@ -87,7 +87,7 @@ class InteractiveGridAgent(GridAgent):
         red = np.array([255,0,0])
 
         if self.color == 'prestige':
-            prestige_alpha = np.tanh(self.prestige/self.prestige_beta)
+            prestige_alpha = np.tanh(self.prestige)
             new_color = (
                     prestige_alpha * blue +
                     (1.-prestige_alpha) * red
@@ -121,7 +121,7 @@ class InteractiveGridAgent(GridAgent):
         # print(self.prestige)
 
     def reward(self, rew):
-        self.prestige = np.clip(self.prestige+rew, 0.0, 1.0)
+        self.prestige = np.clip(self.prestige+rew, -1.0, 1.0)
 
     def reset(self, new_episode=False):
         self.done = False
