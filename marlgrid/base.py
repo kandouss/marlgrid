@@ -7,7 +7,7 @@ import gym_minigrid
 from enum import IntEnum
 import math
 
-from .objects import WorldObj, Wall, Goal, Lava, GridAgent, BonusTile, BulkObj
+from .objects import WorldObj, Wall, Goal, Lava, GridAgent, BonusTile, BulkObj, COLORS
 from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
 
 TILE_PIXELS = 32
@@ -320,7 +320,7 @@ class MultiGrid:
         width_px = self.width * tile_size
         height_px = self.height * tile_size
 
-        img = np.zeros(shape=(height_px, width_px), dtype=np.uint8)[...,None]+np.array([35,25,30])
+        img = np.zeros(shape=(height_px, width_px), dtype=np.uint8)[...,None]+COLORS['shadow']
 
         for j in range(0, self.height):
             for i in range(0, self.width):
@@ -608,7 +608,6 @@ class MultiGridEnv(gym.Env):
                         if isinstance(fwd_cell, (Lava, Goal)):
                             agent.done = True
 
-
                 # TODO: verify pickup/drop/toggle logic in an environment that 
                 #  supports the relevant interactions.
                 # Pick up an object
@@ -639,12 +638,10 @@ class MultiGridEnv(gym.Env):
 
                 # Done action (not used by default)
                 elif action == agent.actions.done:
-                    # dones[agent_no] = True
                     pass
 
                 else:
                     raise ValueError(f"Environment can't handle action {action}.")
-            # agent.step_reward = step_rewards[agent_no]
 
                 agent.on_step(fwd_cell if agent_moved else None)
 
@@ -677,9 +674,6 @@ class MultiGridEnv(gym.Env):
             done = done.all()
 
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
-
-        # for agent, rew in zip(self.agents, step_rewards):
-        #     assert agent.step_reward==rew
 
         return obs, step_rewards, done, {}
 

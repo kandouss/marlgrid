@@ -22,6 +22,7 @@ COLORS = {
     "pink": np.array([255, 0, 189]),
     "white": np.array([255,255,255]),
     "prestige": np.array([255,255,255]),
+    "shadow": np.array([35,25,30]), # nice dark purpley color for cells agents can't see.
 }
 
 # Used to map colors to integers
