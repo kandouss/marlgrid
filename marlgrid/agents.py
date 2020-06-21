@@ -1,9 +1,9 @@
 import gym
 import numpy as np
 from enum import IntEnum
+import warnings
 
 from .objects import GridAgent, BonusTile
-
 
 class InteractiveGridAgent(GridAgent):
     class actions(IntEnum):
@@ -23,7 +23,9 @@ class InteractiveGridAgent(GridAgent):
             observe_rewards=False,
             observe_position=False,
             observe_orientation=False,
-            prestige_beta=5.,
+            restrict_actions=False,
+            hide_item_types=[],
+            prestige_beta=0.95,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -33,8 +35,15 @@ class InteractiveGridAgent(GridAgent):
         self.observe_rewards = observe_rewards
         self.observe_position = observe_position
         self.observe_orientation = observe_orientation
+        self.hide_item_types = hide_item_types
         self.init_kwargs = kwargs
+        self.restrict_actions = restrict_actions
         self.prestige_beta = prestige_beta
+
+        if self.prestige_beta > 1:
+            # warnings.warn("prestige_beta must be between 0 and 1. Using default 0.99")
+            self.prestige_beta = 0.95
+            
 
         image_space = gym.spaces.Box(
             low=0,
@@ -58,7 +67,10 @@ class InteractiveGridAgent(GridAgent):
         else:
             raise ValueError("InteractiveAgent kwarg 'observation_style' must be one of 'image', 'rich'.")
 
-        self.action_space = gym.spaces.Discrete(len(self.actions))
+        if self.restrict_actions:
+            self.action_space = gym.spaces.Discrete(3)
+        else:
+            self.action_space = gym.spaces.Discrete(len(self.actions))
 
         self.metadata = {
             **self.metadata,
@@ -96,6 +108,8 @@ class InteractiveGridAgent(GridAgent):
             observe_rewards = self.observe_rewards,
             observe_position = self.observe_position,
             observe_orientation = self.observe_orientation,
+            hide_item_types = self.hide_item_types,
+            restrict_actions = self.restrict_actions,
             **self.init_kwargs
         )
         return ret
@@ -103,12 +117,11 @@ class InteractiveGridAgent(GridAgent):
     def on_step(self, obj):
         if isinstance(obj, BonusTile):
             self.bonuses.append((obj.bonus_id, self.prestige))
+        self.prestige *= self.prestige_beta
+        # print(self.prestige)
 
     def reward(self, rew):
-        if rew>0:
-            self.prestige += 1
-        else:
-            self.prestige = 0
+        self.prestige = np.clip(self.prestige+rew, 0.0, 1.0)
 
     def reset(self, new_episode=False):
         self.done = False

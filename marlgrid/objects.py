@@ -60,7 +60,7 @@ class WorldObj(metaclass=MetaRegistry):
     @property
     def numeric_color(self):
         return COLORS[self.color]
-
+    
     @property
     def type(self):
         return self.__class__.__name__
@@ -80,7 +80,6 @@ class WorldObj(metaclass=MetaRegistry):
     def toggle(self, env, pos):
         return False
 
-
     def encode(self, str_class=False):
         # Note 5/29/20: Commented out the condition below; was causing agents to 
         #  render incorrectly in partial views. In particular, if there were N red agents,
@@ -90,12 +89,7 @@ class WorldObj(metaclass=MetaRegistry):
         # # else:
         enc_class = self.type if bool(str_class) else self.recursive_subclasses().index(self.__class__)
         enc_color = self.color if isinstance(self.color, int) else COLOR_TO_IDX[self.color]
-        
-        return (
-                enc_class,
-                enc_color,
-                self.state,
-            )
+        return (enc_class, enc_color, self.state)
 
     def describe(self):
         return f"Obj: {self.type}({self.color}, {self.state})"
@@ -130,6 +124,10 @@ class GridAgent(WorldObj):
     @property
     def dir(self):
         return self.state % 4
+
+    @property
+    def type(self):
+        return 'Agent'
 
     @dir.setter
     def dir(self, dir):
