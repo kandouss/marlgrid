@@ -118,7 +118,6 @@ class InteractiveGridAgent(GridAgent):
         if isinstance(obj, BonusTile):
             self.bonuses.append((obj.bonus_id, self.prestige))
         self.prestige *= self.prestige_beta
-        # print(self.prestige)
 
     def reward(self, rew):
         self.prestige = np.clip(self.prestige+rew, -1.0, 1.0)

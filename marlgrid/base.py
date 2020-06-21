@@ -204,7 +204,6 @@ class MultiGrid:
         grid = cls((width, height))
 
     def process_vis(grid, agent_pos):
-        # print(f"Agent pos is {agent_pos}")
         mask = np.zeros_like(grid.grid, dtype=np.bool)
         mask[agent_pos[0], agent_pos[1]] = True
 
@@ -468,12 +467,9 @@ class MultiGridEnv(gym.Env):
             vis_mask = grid.process_vis(agent_pos=agent_pos)
 
         # Warning about the rest of the function:
-        #  Ensures the agent is on top in its egocentric view, and allows masking away objects that the agent isn't supposed to see.
+        #  Allows masking away objects that the agent isn't supposed to see.
         #  But breaks consistency between the states of the grid objects in the parial views
         #   and the grid objects overall.
-        # grid.set(*agent_pos, agent)
-
-        # things = list(set([grid.get(i,j).type if grid.get(i,j) is not None else 'None' for i in range(grid.width) for j in range(grid.height)]))
         if len(getattr(agent, 'hide_item_types', []))>0:
             for i in range(grid.width):
                 for j in range(grid.height):
@@ -483,8 +479,6 @@ class MultiGridEnv(gym.Env):
                             grid.set(i,j,item.agents[0])
                         else:
                             grid.set(i,j,None)
-
-        # print(things, getattr(agent, 'hide_item_types', []))
 
         return grid, vis_mask
 
@@ -825,17 +819,12 @@ class MultiGridEnv(gym.Env):
                     agent_no += 1
                 
                 col_width = min(img.shape[1]//2, max([v.shape[1] for v in views]))+pad
-                # print(f"col width is {col_width}")
                 img_col = np.zeros((img.shape[0], col_width, 3), dtype=np.uint8)+pad_grey
                 for k, view in enumerate(views):
                     start_x = (k * img.shape[0]) // len(views)
                     start_y = 0  # (k*img.shape[1])//len(views)
                     dx, dy = view.shape[:2]
-                    # print(start_x, dx, start_x+dx)
-                    # print(start_y, dy, start_y+dy)
-                    # print(view.shape)
-                    # print(img_col.shape)
-                    # print(img_col[start_x : start_x + dx, start_y : start_y + dy, :].shape)
+
                     tmp = img_col[start_x : start_x + dx, start_y : start_y + dy, :].shape
                     img_col[start_x : start_x + dx, start_y : start_y + dy, :] = view[:tmp[0],:tmp[1],:]
                 cols.append(img_col)
