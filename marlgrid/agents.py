@@ -26,6 +26,7 @@ class InteractiveGridAgent(GridAgent):
             restrict_actions=False,
             hide_item_types=[],
             prestige_beta=0.95,
+            prestige_scale=2,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -39,6 +40,7 @@ class InteractiveGridAgent(GridAgent):
         self.init_kwargs = kwargs
         self.restrict_actions = restrict_actions
         self.prestige_beta = prestige_beta
+        self.prestige_scale = prestige_scale
 
         if self.prestige_beta > 1:
             # warnings.warn("prestige_beta must be between 0 and 1. Using default 0.99")
@@ -87,7 +89,7 @@ class InteractiveGridAgent(GridAgent):
         red = np.array([255,0,0])
 
         if self.color == 'prestige':
-            prestige_alpha = np.tanh(self.prestige)
+            prestige_alpha = 1/(1 + np.exp(-self.prestige*self.prestige_scale))
             new_color = (
                     prestige_alpha * blue +
                     (1.-prestige_alpha) * red
@@ -110,6 +112,8 @@ class InteractiveGridAgent(GridAgent):
             observe_orientation = self.observe_orientation,
             hide_item_types = self.hide_item_types,
             restrict_actions = self.restrict_actions,
+            prestige_beta = self.prestige_beta,
+            prestige_scale=self.prestige_scale,
             **self.init_kwargs
         )
         return ret
@@ -120,7 +124,7 @@ class InteractiveGridAgent(GridAgent):
         self.prestige *= self.prestige_beta
 
     def reward(self, rew):
-        self.prestige = np.clip(self.prestige+rew, -1.0, 1.0)
+        self.prestige += rew
 
     def reset(self, new_episode=False):
         self.done = False
