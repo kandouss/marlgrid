@@ -4,7 +4,7 @@ from .cluttered import ClutteredMultiGrid
 from .goalcycle import ClutteredGoalCycleEnv
 from .viz_test import VisibilityTestEnv
 
-from ..agents import InteractiveGridAgent
+from ..agents import GridAgentInterface
 from gym.envs.registration import register as gym_register
 
 import sys
@@ -31,7 +31,7 @@ def register_marl_env(
             instance = super(env_class, RegEnv).__new__(env_class)
             instance.__init__(
                 agents=[
-                    InteractiveGridAgent(color=c, view_size=view_size, view_tile_size=8)
+                    GridAgentInterface(color=c, view_size=view_size, view_tile_size=8)
                     for c in colors[:n_agents]
                 ],
                 grid_size=grid_size,
