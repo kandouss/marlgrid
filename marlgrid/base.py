@@ -87,6 +87,11 @@ class MultiGrid:
 
         self.obj_reg = ObjectRegistry(objs=[None]) if obj_reg is None else obj_reg
 
+    @property
+    def opacity(self):
+        transparent_fun = np.vectorize(lambda k: (self.obj_reg.key_to_obj_map[k].see_behind() if hasattr(self.obj_reg.key_to_obj_map[k], 'see_behind') else True))
+        return ~transparent_fun(self.grid)
+
     def __getitem__(self, *args, **kwargs):
         return self.__class__(
             np.ndarray.__getitem__(self.grid, *args, **kwargs),
@@ -203,42 +208,6 @@ class MultiGrid:
         vis_mask[i, j] = np.ones(shape=(width, height), dtype=np.bool)
         grid = cls((width, height))
 
-    def process_vis(grid, agent_pos):
-        mask = np.zeros_like(grid.grid, dtype=np.bool)
-        mask[agent_pos[0], agent_pos[1]] = True
-
-        for j in reversed(range(0, grid.height)):
-            for i in range(agent_pos[0], grid.width):
-                if not mask[i, j]:
-                    continue
-
-                cell = grid.get(i, j)
-                if cell and not cell.see_behind():
-                    continue
-
-                if i < grid.width - 1:
-                    mask[i + 1, j] = True
-                if j > 0:
-                    mask[i, j - 1] = True
-                    if i < grid.width - 1:
-                        mask[i + 1, j - 1] = True
-
-            for i in reversed(range(0, agent_pos[0]+1)):
-                if not mask[i, j]:
-                    continue
-
-                cell = grid.get(i, j)
-                if cell and not cell.see_behind():
-                    continue
-                
-                if i > 0:
-                    mask[i - 1, j] = True
-                if j > 0:
-                    mask[i, j - 1] = True
-                    if i > 0:
-                        mask[i - 1, j - 1] = True
-
-        return mask
     
     @classmethod
     def cache_render_fun(cls, key, f, *args, **kwargs):
@@ -357,7 +326,6 @@ class MultiGridEnv(gym.Env):
         width=None,
         height=None,
         max_steps=100,
-        see_through_walls=False,
         done_condition=None,
         reward_decay=True,
         seed=1337,
@@ -390,7 +358,6 @@ class MultiGridEnv(gym.Env):
         self.width = width
         self.height = height
         self.max_steps = max_steps
-        self.see_through_walls = see_through_walls
         self.reward_decay = reward_decay
         self.seed(seed=seed)
         self.agent_spawn_kwargs = agent_spawn_kwargs
@@ -454,17 +421,16 @@ class MultiGridEnv(gym.Env):
 
     def gen_obs_grid(self, agent):
         topX, topY, botX, botY = agent.get_view_exts()
-        agent_pos = (agent.view_size // 2, agent.view_size - 1)
+        # agent_pos = agent.get_view_pos()
         grid = self.grid.slice(
             topX, topY, agent.view_size, agent.view_size, rot_k=agent.dir + 1
         )
 
         # Process occluders and visibility
         # Note that this incurs some performance cost
-        if self.see_through_walls:
-            vis_mask = None
-        else:
-            vis_mask = grid.process_vis(agent_pos=agent_pos)
+        # print(grid.opacity)
+        vis_mask = agent.process_vis(grid.opacity)
+        # print(vis_mask)
 
         # Warning about the rest of the function:
         #  Allows masking away objects that the agent isn't supposed to see.
@@ -768,7 +734,7 @@ class MultiGridEnv(gym.Env):
             if agent.active:
                 dxlow, dylow = max(0, 0-xlow), max(0, 0-ylow)
                 dxhigh, dyhigh = max(0, xhigh-self.grid.width), max(0, yhigh-self.grid.height)
-                if self.see_through_walls:
+                if agent.see_through_walls:
                     highlight_mask[xlow+dxlow:xhigh-dxhigh, ylow+dylow:yhigh-dyhigh] = True
                 else:
                     a,b = self.gen_obs_grid(agent)

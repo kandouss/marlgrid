@@ -2,10 +2,11 @@ import gym
 import numpy as np
 from enum import IntEnum
 import warnings
+import numba
 
 from .objects import GridAgent, BonusTile
 
-class InteractiveGridAgent(GridAgent):
+class GridAgentInterface(GridAgent):
     class actions(IntEnum):
         left = 0  # Rotate left
         right = 1  # Rotate right
@@ -19,11 +20,13 @@ class InteractiveGridAgent(GridAgent):
             self,
             view_size=7,
             view_tile_size=5,
+            view_offset=0,
             observation_style='image',
             observe_rewards=False,
             observe_position=False,
             observe_orientation=False,
             restrict_actions=False,
+            see_through_walls=False,
             hide_item_types=[],
             prestige_beta=0.95,
             prestige_scale=2,
@@ -32,11 +35,13 @@ class InteractiveGridAgent(GridAgent):
 
         self.view_size = view_size
         self.view_tile_size = view_tile_size
+        self.view_offset = view_offset
         self.observation_style = observation_style
         self.observe_rewards = observe_rewards
         self.observe_position = observe_position
         self.observe_orientation = observe_orientation
         self.hide_item_types = hide_item_types
+        self.see_through_walls = see_through_walls
         self.init_kwargs = kwargs
         self.restrict_actions = restrict_actions
         self.prestige_beta = prestige_beta
@@ -105,6 +110,7 @@ class InteractiveGridAgent(GridAgent):
     def clone(self):
         ret =  self.__class__(
             view_size = self.view_size,
+            view_offset=self.view_offset,
             view_tile_size = self.view_tile_size,
             observation_style = self.observation_style,
             observe_rewards = self.observe_rewards,
@@ -114,6 +120,7 @@ class InteractiveGridAgent(GridAgent):
             restrict_actions = self.restrict_actions,
             prestige_beta = self.prestige_beta,
             prestige_scale=self.prestige_scale,
+            see_through_walls=self.see_through_walls,
             **self.init_kwargs
         )
         return ret
@@ -179,6 +186,11 @@ class InteractiveGridAgent(GridAgent):
         dx, dy = self.dir_vec
         rx, ry = self.right_vec
 
+        
+        ax -= 2*self.view_offset*dx
+        ay -= 2*self.view_offset*dy
+
+
         # Compute the absolute coordinates of the top-left view corner
         sz = self.view_size
         hs = self.view_size // 2
@@ -195,28 +207,34 @@ class InteractiveGridAgent(GridAgent):
 
         return vx, vy
 
+        
+    def get_view_pos(self):
+        return (self.view_size // 2, self.view_size - 1 - self.view_offset)
+
+
     def get_view_exts(self):
         """
         Get the extents of the square set of tiles visible to the agent
         Note: the bottom extent indices are not included in the set
         """
+
         dir = self.dir
         # Facing right
         if dir == 0:  # 1
-            topX = self.pos[0]
+            topX = self.pos[0] - self.view_offset
             topY = self.pos[1] - self.view_size // 2
         # Facing down
         elif dir == 1:  # 0
             topX = self.pos[0] - self.view_size // 2
-            topY = self.pos[1]
+            topY = self.pos[1] - self.view_offset
         # Facing left
         elif dir == 2:  # 3
-            topX = self.pos[0] - self.view_size + 1
+            topX = self.pos[0] - self.view_size + 1 + self.view_offset
             topY = self.pos[1] - self.view_size // 2
         # Facing up
         elif dir == 3:  # 2
             topX = self.pos[0] - self.view_size // 2
-            topY = self.pos[1] - self.view_size + 1
+            topY = self.pos[1] - self.view_size + 1 + self.view_offset
         else:
             assert False, "invalid agent direction"
 
@@ -246,3 +264,58 @@ class InteractiveGridAgent(GridAgent):
 
     def sees(self, x, y):
         raise NotImplementedError
+
+    def process_vis(self, opacity_grid):
+        assert len(opacity_grid.shape) == 2
+        if not self.see_through_walls:
+            return occlude_mask(~opacity_grid, self.get_view_pos())
+        else:
+            return np.full(opacity_grid.shape, 1, dtype=np.bool)
+    
+
+@numba.njit
+def occlude_mask(grid, agent_pos):
+    mask = np.zeros(grid.shape[:2]).astype(numba.boolean)
+    mask[agent_pos[0], agent_pos[1]] = True
+    width, height = grid.shape[:2]
+
+    for j in range(agent_pos[1]+1,0,-1):
+        for i in range(agent_pos[0], width):
+            if mask[i,j] and grid[i,j]:
+                if i < width - 1:
+                    mask[i + 1, j] = True
+                if j > 0:
+                    mask[i, j - 1] = True
+                    if i < width - 1:
+                        mask[i + 1, j - 1] = True
+
+        for i in range(agent_pos[0]+1,0,-1):
+            if mask[i,j] and grid[i,j]:    
+                if i > 0:
+                    mask[i - 1, j] = True
+                if j > 0:
+                    mask[i, j - 1] = True
+                    if i > 0:
+                        mask[i - 1, j - 1] = True
+
+
+    for j in range(agent_pos[1], height):
+        for i in range(agent_pos[0], width):
+            if mask[i,j] and grid[i,j]:
+                if i < width - 1:
+                    mask[i + 1, j] = True
+                if j < height-1:
+                    mask[i, j + 1] = True
+                    if i < width - 1:
+                        mask[i + 1, j + 1] = True
+
+        for i in range(agent_pos[0]+1,0,-1):
+            if mask[i,j] and grid[i,j]:
+                if i > 0:
+                    mask[i - 1, j] = True
+                if j < height-1:
+                    mask[i, j + 1] = True
+                    if i > 0:
+                        mask[i - 1, j + 1] = True
+                    
+    return mask
