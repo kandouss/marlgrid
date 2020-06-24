@@ -1,3 +1,5 @@
+from ..base import MultiGridEnv
+
 from .empty import EmptyMultiGrid
 from .doorkey import DoorKeyEnv
 from .cluttered import ClutteredMultiGrid
@@ -8,6 +10,8 @@ from ..agents import GridAgentInterface
 from gym.envs.registration import register as gym_register
 
 import sys
+import inspect
+import random
 
 this_module = sys.modules[__name__]
 registered_envs = []
@@ -44,6 +48,19 @@ def register_marl_env(
     setattr(this_module, env_class_name, RegEnv)
     registered_envs.append(env_name)
     gym_register(env_name, entry_point=f"marlgrid.envs:{env_class_name}")
+
+
+def env_from_config(env_config, randomize_seed=True):
+    possible_envs = {k:v for k,v in globals().items() if inspect.isclass(v) and issubclass(v, MultiGridEnv)}
+    
+    env_class = possible_envs[env_config['env_class']]
+    
+    env_kwargs = {k:v for k,v in env_config.items() if k != 'env_class'}
+    if randomize_seed:
+        env_kwargs['seed'] = env_kwargs.get('seed', 0) + random.randint(0, 1337*1337)
+    
+    return env_class(**env_kwargs)
+
 
 register_marl_env(
     "MarlGrid-1AgentCluttered15x15-v0",

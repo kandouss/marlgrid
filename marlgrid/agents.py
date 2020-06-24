@@ -6,6 +6,15 @@ import numba
 
 from .objects import GridAgent, BonusTile
 
+def update_config_dict(base_config, new_config):
+    novel_keys = []
+    updated_config = copy.deepcopy(base_config)
+    for k,v in new_config.items():
+        if k not in base_config:
+            novel_keys.append(k)
+        updated_config[k] = v
+    return updated_config, novel_keys
+
 class GridAgentInterface(GridAgent):
     class actions(IntEnum):
         left = 0  # Rotate left
@@ -51,7 +60,6 @@ class GridAgentInterface(GridAgent):
             # warnings.warn("prestige_beta must be between 0 and 1. Using default 0.99")
             self.prestige_beta = 0.95
             
-
         image_space = gym.spaces.Box(
             low=0,
             high=255,

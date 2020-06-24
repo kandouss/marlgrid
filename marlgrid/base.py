@@ -8,6 +8,7 @@ from enum import IntEnum
 import math
 
 from .objects import WorldObj, Wall, Goal, Lava, GridAgent, BonusTile, BulkObj, COLORS
+from .agents import GridAgentInterface
 from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
 
 TILE_PIXELS = 32
@@ -321,7 +322,7 @@ class MultiGrid:
 class MultiGridEnv(gym.Env):
     def __init__(
         self,
-        agents,
+        agents = [],
         grid_size=None,
         width=None,
         height=None,
@@ -333,6 +334,7 @@ class MultiGridEnv(gym.Env):
         ghost_mode=True,
         agent_spawn_kwargs = {}
     ):
+
         if grid_size is not None:
             assert width == None and height == None
             width, height = grid_size, grid_size
@@ -341,17 +343,7 @@ class MultiGridEnv(gym.Env):
             raise ValueError("done_condition must be one of ['any', 'all', None].")
         self.done_condition = done_condition
 
-        self.num_agents = len(agents)
-        self.agents = agents
         self.respawn = respawn
-
-        self.action_space = gym.spaces.Tuple(
-            [agent.action_space for agent in self.agents]
-        )
-        self.observation_space = gym.spaces.Tuple(
-            [agent.observation_space for agent in self.agents]
-        )
-        self.reward_range = [(0, 1) for _ in range(len(self.agents))]
 
         self.window = None
 
@@ -363,7 +355,35 @@ class MultiGridEnv(gym.Env):
         self.agent_spawn_kwargs = agent_spawn_kwargs
         self.ghost_mode = ghost_mode
 
+        self.agents = []
+        for agent in agents:
+            self.add_agent(agent)
+
         self.reset()
+
+    @property
+    def action_space(self):
+        return gym.spaces.Tuple(
+            [agent.action_space for agent in self.agents]
+        )
+
+    @property
+    def observation_space(self):
+        return gym.spaces.Tuple(
+            [agent.observation_space for agent in self.agents]
+        )
+
+    @property
+    def num_agents(self):
+        return len(self.agents)
+    
+    def add_agent(self, agent_interface):
+        if isinstance(agent_interface, dict):
+            self.agents.append(GridAgentInterface(**agent_interface))
+        elif isinstance(agent_interface, GridAgentInterface):
+            self.agents.append(agent_interface)
+        else:
+            raise ValueError("To add an agent to a marlgrid environment, call add_agent with either a GridAgentInterface object or a dictionary that can be used to initialize one.")
 
     def seed(self, seed=1337):
         # Seed the random number generator
@@ -494,7 +514,7 @@ class MultiGridEnv(gym.Env):
                 for a, al in zip(self.agents, agent_locs):
                     print(" > ", a.color,'-', al)
                 import pdb; pdb.set_trace()
-
+                
         assert len(actions) == len(self.agents)
 
         step_rewards = np.zeros((len(self.agents,)), dtype=np.float)

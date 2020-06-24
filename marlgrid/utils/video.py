@@ -143,12 +143,13 @@ class GridRecorder(gym.core.Wrapper):
         self.reset_count = 0
         self.last_save = -10000
         self.recording = False
-        self.save_root = save_root
+        self.save_root = self.fix_path(save_root)
         self.save_videos = save_videos
         self.save_images = save_images
         self.auto_save_interval = auto_save_interval
         self.render_kwargs = render_kwargs
         self.video_kwargs = {**self.default_video_kwargs, **video_kwargs}
+        self.n_parallel = getattr(env, 'num_envs', 1)
 
         if max_steps is None:
             if hasattr(env, "max_steps") and env.max_steps != 0:
@@ -158,6 +159,9 @@ class GridRecorder(gym.core.Wrapper):
         else:
             self.max_steps = max_steps + 1
     
+    @staticmethod
+    def fix_path(path):
+        return os.path.abspath(os.path.expanduser(path))
     @property
     def should_record(self):
         if self.recording:
@@ -166,16 +170,25 @@ class GridRecorder(gym.core.Wrapper):
             return False
         return (self.reset_count - self.last_save) >= self.auto_save_interval
 
-    def export_frames(self):
-        output_path = os.path.join(self.save_root, f'frames_{self.reset_count}')
-        render_frames(self.frames[:self.ptr], output_path)
+    def export_frames(self, ident, save_root=None):
+        if save_root is None:
+            save_root = self.save_root
+        if ident is None:
+            ident = f'frames_{self.reset_count}'
+        render_frames(self.frames[:self.ptr], os.path.join(self.fix_path(save_root), ident))
 
-    def export_video(self):
-        output_path =  os.path.join(self.save_root, f'video_{self.reset_count}.mp4')
-        export_video(self.frames[:self.ptr], output_path, **self.video_kwargs)
+    def export_video(self,  ident, save_root=None):
+        if save_root is None:
+            save_root = self.save_root
+        if ident is None:
+            ident = f'video_{self.reset_count}.mp4'
+        export_video(self.frames[:self.ptr],  os.path.join(self.fix_path(save_root), ident), **self.video_kwargs)
+
+    def export_both(self, ident, save_root=None):
+        self.export_frames(f'{ident}_frames', save_root=save_root)
+        self.export_video(f'{ident}.mp4', save_root=save_root)
 
     def reset(self, **kwargs):
-        # print(f"grid recorreset {self.reset_count}")
         if self.should_record and self.ptr>0:
             self.append_current_frame()
             if self.save_images:
@@ -185,12 +198,14 @@ class GridRecorder(gym.core.Wrapper):
             self.last_save = self.reset_count
             
         self.ptr = 0
-        self.reset_count += 1
+        self.reset_count += self.n_parallel
         return self.env.reset(**kwargs)
 
     def append_current_frame(self):
         if self.should_record:
             new_frame = self.env.render(mode="rgb_array", **self.render_kwargs)
+            if isinstance(new_frame, list) or len(new_frame.shape)>3:
+                new_frame = new_frame[0]
             if self.frames is None:
                 self.frames = np.zeros(
                     (self.max_steps, *new_frame.shape), dtype=new_frame.dtype
