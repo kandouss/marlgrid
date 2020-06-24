@@ -712,6 +712,9 @@ class MultiGridEnv(gym.Env):
         tile_size=TILE_PIXELS,
         show_agent_views=True,
         max_agents_per_col=3,
+        agent_col_width_frac = 0.3,
+        agent_col_padding_px = 2,
+        pad_grey = 100
     ):
         """
         Render the whole-grid human view
@@ -748,46 +751,31 @@ class MultiGridEnv(gym.Env):
             tile_size, highlight_mask=highlight_mask if highlight else None
         )
         rescale = lambda X, rescale_factor=2: np.kron(
-            X, np.ones((rescale_factor, rescale_factor, 1))
+            X, np.ones((int(rescale_factor), int(rescale_factor), 1))
         )
 
         if show_agent_views:
-            agent_no = 0
+
+            target_partial_width = int(img.shape[0]*agent_col_width_frac-2*agent_col_padding_px)
+            target_partial_height = (img.shape[1]-2*agent_col_padding_px)//max_agents_per_col
+
+            agent_views = [self.gen_agent_obs(agent) for agent in self.agents]
+            agent_views = [view['pov'] if isinstance(view, dict) else view for view in agent_views]
+            agent_views = [rescale(view, min(target_partial_width/view.shape[0], target_partial_height/view.shape[1])) for view in agent_views]
+            # import pdb; pdb.set_trace()
+            agent_views = [agent_views[pos:pos+max_agents_per_col] for pos in range(0, len(agent_views), max_agents_per_col)]
+
+            f_offset = lambda view: np.array([target_partial_height - view.shape[1], target_partial_width - view.shape[0]])//2
+            
             cols = []
-            rescale_factor = None
-            pad = 5
-            pad_grey = 100
-            # img = np.pad(img, ((pad,pad),(pad,pad),(0,0)), constant_values=128)
+            for col_views in agent_views:
+                col = np.full(( img.shape[0],target_partial_width+2*agent_col_padding_px,3), pad_grey, dtype=np.uint8)
+                for k, view in enumerate(col_views):
+                    offset = f_offset(view) + agent_col_padding_px
+                    offset[0] += k*target_partial_height
+                    col[offset[0]:offset[0]+view.shape[0], offset[1]:offset[1]+view.shape[1],:] = view
+                cols.append(col)
 
-            for col_no in range(len(self.agents) // (max_agents_per_col + 1) + 1):
-                col_count = min(max_agents_per_col, len(self.agents) - agent_no)
-                views = []
-
-                for row_no in range(col_count):
-                    tmp = self.gen_agent_obs(self.agents[agent_no])
-                    if isinstance(tmp, dict) and 'pov' in tmp:
-                        tmp = tmp['pov']
-                    if rescale_factor is None:
-                        rescale_factor = max(1, int(min(
-                            (img.shape[0]/min(3, col_count)-pad) / (tmp.shape[1]),
-                            (img.shape[1]-2*pad) // (2*(tmp.shape[1]))
-                        ))-1)
-                    views.append(
-                        np.pad(
-                            rescale(tmp, rescale_factor),
-                            ((pad,pad),(pad,pad),(0,0)), constant_values=pad_grey))
-                    agent_no += 1
-                
-                col_width = min(img.shape[1]//2, max([v.shape[1] for v in views]))+pad
-                img_col = np.zeros((img.shape[0], col_width, 3), dtype=np.uint8)+pad_grey
-                for k, view in enumerate(views):
-                    start_x = (k * img.shape[0]) // len(views)
-                    start_y = 0  # (k*img.shape[1])//len(views)
-                    dx, dy = view.shape[:2]
-
-                    tmp = img_col[start_x : start_x + dx, start_y : start_y + dy, :].shape
-                    img_col[start_x : start_x + dx, start_y : start_y + dy, :] = view[:tmp[0],:tmp[1],:]
-                cols.append(img_col)
             img = np.concatenate((img, *cols), axis=1)
 
         if mode == "human":
