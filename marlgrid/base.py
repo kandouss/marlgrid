@@ -9,6 +9,7 @@ import math
 
 from .objects import WorldObj, Wall, Goal, Lava, GridAgent, BonusTile, BulkObj, COLORS
 from .agents import GridAgentInterface
+from .rendering import SimpleImageViewer
 from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
 
 TILE_PIXELS = 32
@@ -746,9 +747,9 @@ class MultiGridEnv(gym.Env):
             return
 
         if mode == "human" and not self.window:
-            from gym.envs.classic_control.rendering import SimpleImageViewer
+            # from gym.envs.classic_control.rendering import SimpleImageViewer
 
-            self.window = SimpleImageViewer()
+            self.window = SimpleImageViewer(caption="Marlgrid")
 
         # Compute which cells are visible to the agent
         highlight_mask = np.full((self.width, self.height), False, dtype=np.bool)
@@ -799,6 +800,10 @@ class MultiGridEnv(gym.Env):
             img = np.concatenate((img, *cols), axis=1)
 
         if mode == "human":
-            self.window.imshow(img)
+            if not self.window.isopen:
+                self.window.imshow(img)
+                self.window.window.set_caption("Marlgrid")
+            else:
+                self.window.imshow(img)
 
         return img
