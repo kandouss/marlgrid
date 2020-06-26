@@ -39,6 +39,7 @@ class GridAgentInterface(GridAgent):
             hide_item_types=[],
             prestige_beta=0.95,
             prestige_scale=2,
+            allow_negative_prestige=False,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -55,6 +56,7 @@ class GridAgentInterface(GridAgent):
         self.restrict_actions = restrict_actions
         self.prestige_beta = prestige_beta
         self.prestige_scale = prestige_scale
+        self.allow_negative_prestige = allow_negative_prestige
 
         if self.prestige_beta > 1:
             # warnings.warn("prestige_beta must be between 0 and 1. Using default 0.99")
@@ -102,11 +104,19 @@ class GridAgentInterface(GridAgent):
         red = np.array([255,0,0])
 
         if self.color == 'prestige':
-            prestige_alpha = 1/(1 + np.exp(-self.prestige*self.prestige_scale))
+            # Compute a scaled prestige value between 0 and 1 that will be used to 
+            #   interpolate between the low-prestige (red) and high-prestige (blue)
+            #   colors.
+            if self.allow_negative_prestige:
+                prestige_scaled = 1/(1 + np.exp(-self.prestige/self.prestige_scale))
+            else:
+                prestige_scaled = np.tanh(self.prestige/self.prestige_scale)
+
             new_color = (
-                    prestige_alpha * blue +
-                    (1.-prestige_alpha) * red
+                    prestige_scaled * blue +
+                    (1.-prestige_scaled) * red
                 ).astype(np.int)
+
             grey_pixels = (np.diff(tile, axis=-1)==0).all(axis=-1)
 
             alpha = tile[...,0].astype(np.uint16)[...,None]
@@ -126,9 +136,10 @@ class GridAgentInterface(GridAgent):
             observe_orientation = self.observe_orientation,
             hide_item_types = self.hide_item_types,
             restrict_actions = self.restrict_actions,
-            prestige_beta = self.prestige_beta,
-            prestige_scale=self.prestige_scale,
             see_through_walls=self.see_through_walls,
+            prestige_beta = self.prestige_beta,
+            prestige_scale = self.prestige_scale,
+            allow_negative_prestige = self.allow_negative_prestige,
             **self.init_kwargs
         )
         return ret
@@ -139,7 +150,13 @@ class GridAgentInterface(GridAgent):
         self.prestige *= self.prestige_beta
 
     def reward(self, rew):
-        self.prestige += rew
+        if self.allow_negative_prestige:
+            self.rew += rew
+        else:
+            if rew >= 0:
+                self.prestige += rew
+            else: # rew < 0
+                self.prestige = 0
 
     def reset(self, new_episode=False):
         self.done = False
