@@ -28,22 +28,22 @@ COLORS = {
 # Used to map colors to integers
 COLOR_TO_IDX = dict({v: k for k, v in enumerate(COLORS.keys())})
 
-OBJECT_TYPE_REGISTRY = []
+OBJECT_TYPES = []
 
-class MetaRegistry(type):
+class ObjectTypeRegistry(type):
     def __new__(meta, name, bases, class_dict):
         cls = type.__new__(meta, name, bases, class_dict)
-        if name not in OBJECT_TYPE_REGISTRY:
-            OBJECT_TYPE_REGISTRY.append(cls)
+        if name not in OBJECT_TYPES:
+            OBJECT_TYPES.append(cls)
 
         def get_recursive_subclasses():
-            return OBJECT_TYPE_REGISTRY
+            return OBJECT_TYPES
 
         cls.recursive_subclasses = staticmethod(get_recursive_subclasses)
         return cls
 
 
-class WorldObj(metaclass=MetaRegistry):
+class WorldObj(metaclass=ObjectTypeRegistry):
     def __init__(self, color="worst", state=0):
         self.color = color
         self.state = state
@@ -150,7 +150,7 @@ class GridAgent(WorldObj):
         fill_coords(img, tri_fn, COLORS[self.color])
 
 
-class BulkObj(WorldObj, metaclass=MetaRegistry):
+class BulkObj(WorldObj, metaclass=ObjectTypeRegistry):
     def __hash__(self):
         return hash((self.__class__, self.color, self.state, tuple(self.agents)))
 

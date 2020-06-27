@@ -493,28 +493,33 @@ class MultiGridEnv(gym.Env):
     def __str__(self):
         return self.grid.__str__()
 
-    def step(self, actions):
+    def check_agent_position_integrity(self, title=''):
+        '''
+        This function checks whether each agent is present in the grid in exactly one place.
+        This is particularly helpful for validating the world state when ghost_mode=False and
+        agents can stack, since the logic for moving them around gets a bit messy.
+        Prints a message and drops into pdb if there's an inconsistency.
+        '''
+        agent_locs = [[] for _ in range(len(self.agents))]
+        for i in range(self.grid.width):
+            for j in range(self.grid.height):
+                x = self.grid.get(i,j)
+                for k,agent in enumerate(self.agents):
+                    if x==agent:
+                        agent_locs[k].append(('top', (i,j)))
+                    if hasattr(x, 'agents') and agent in x.agents:
+                        agent_locs[k].append(('stacked', (i,j)))
+        if not all([len(x)==1 for x in agent_locs]):
+            print(f"{title} > Failed integrity test!")
+            for a, al in zip(self.agents, agent_locs):
+                print(" > ", a.color,'-', al)
+            import pdb; pdb.set_trace()
 
-        def test_integrity(title=''):
-            '''
-            This function checks whether each agent is present in the grid in exactly one place.
-            This is particularly helpful for validating the world state when ghost_mode=False and
-            agents can stack.
-            '''
-            agent_locs = [[] for _ in range(len(self.agents))]
-            for i in range(self.grid.width):
-                for j in range(self.grid.height):
-                    x = self.grid.get(i,j)
-                    for k,agent in enumerate(self.agents):
-                        if x==agent:
-                            agent_locs[k].append(('top', (i,j)))
-                        if hasattr(x, 'agents') and agent in x.agents:
-                            agent_locs[k].append(('stacked', (i,j)))
-            if not all([len(x)==1 for x in agent_locs]):
-                print(f"{title} > Failed integrity test!")
-                for a, al in zip(self.agents, agent_locs):
-                    print(" > ", a.color,'-', al)
-                import pdb; pdb.set_trace()
+    def step(self, actions):
+        # Spawn agents if it's time.
+        for agent in self.agents:
+            if not agent.active and self.step_count == agent.spawn_delay:
+                self.place_agent(agent, **self.agent_spawn_kwargs)
                 
         assert len(actions) == len(self.agents)
 
@@ -713,17 +718,18 @@ class MultiGridEnv(gym.Env):
 
     def place_agent(self, agent, top=None, size=None, rand_dir=True, max_tries=1000):
         agent.pos = self.place_obj(agent, top=top, size=size, max_tries=max_tries)
+
         if rand_dir:
             agent.dir = self._rand_int(0, 4)
+
         return agent
 
     def place_agents(self, top=None, size=None, rand_dir=True, max_tries=1000):
         for agent in self.agents:
-            self.place_agent(
-                agent, top=top, size=size, rand_dir=rand_dir, max_tries=max_tries
-            )
-            if hasattr(self, "mission"):
-                agent.mission = self.mission
+            if not hasattr(agent, 'spawn_delay'):
+                self.place_agent(
+                    agent, top=top, size=size, rand_dir=rand_dir, max_tries=max_tries
+                )
 
     def render(
         self,

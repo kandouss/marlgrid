@@ -40,6 +40,7 @@ class GridAgentInterface(GridAgent):
             prestige_beta=0.95,
             prestige_scale=2,
             allow_negative_prestige=False,
+            spawn_delay=0,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -57,6 +58,7 @@ class GridAgentInterface(GridAgent):
         self.prestige_beta = prestige_beta
         self.prestige_scale = prestige_scale
         self.allow_negative_prestige = allow_negative_prestige
+        self.spawn_delay = spawn_delay
 
         if self.prestige_beta > 1:
             # warnings.warn("prestige_beta must be between 0 and 1. Using default 0.99")
@@ -82,7 +84,7 @@ class GridAgentInterface(GridAgent):
                 obs_space['orientation'] = gym.spaces.Discrete(n=4)
             self.observation_space = gym.spaces.Dict(obs_space)
         else:
-            raise ValueError("InteractiveAgent kwarg 'observation_style' must be one of 'image', 'rich'.")
+            raise ValueError(f"{self.__class__.__name__} kwarg 'observation_style' must be one of 'image', 'rich'.")
 
         if self.restrict_actions:
             self.action_space = gym.spaces.Discrete(3)
@@ -140,6 +142,7 @@ class GridAgentInterface(GridAgent):
             prestige_beta = self.prestige_beta,
             prestige_scale = self.prestige_scale,
             allow_negative_prestige = self.allow_negative_prestige,
+            spawn_delay = self.spawn_delay,
             **self.init_kwargs
         )
         return ret
