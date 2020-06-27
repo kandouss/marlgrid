@@ -16,6 +16,11 @@ TILE_PIXELS = 32
 
 
 class ObjectRegistry:
+    '''
+    This class contains dicts that map objects to numeric keys and vise versa.
+    Used so that grid worlds can represent objects using numerical arrays rather 
+        than lists of lists of generic objects.
+    '''
     def __init__(self, objs=[], max_num_objects=1000):
         self.key_to_obj_map = {}
         self.obj_to_key_map = {}
@@ -57,7 +62,12 @@ class ObjectRegistry:
     def obj_of_key(self, key):
         return self.key_to_obj_map[key]
 
-def rotate_grid(grid, rot_k):        
+
+def rotate_grid(grid, rot_k):
+    '''
+    This function basically replicates np.rot90 (with the correct args for rotating images).
+    But it's faster.
+    '''
     rot_k = rot_k % 4
     if rot_k==3:
         return np.moveaxis(grid[:,::-1], 0, 1)
@@ -362,6 +372,11 @@ class MultiGridEnv(gym.Env):
 
         self.reset()
 
+    def seed(self, seed=1337):
+        # Seed the random number generator
+        self.np_random, _ = gym.utils.seeding.np_random(seed)
+        return [seed]
+
     @property
     def action_space(self):
         return gym.spaces.Tuple(
@@ -384,42 +399,9 @@ class MultiGridEnv(gym.Env):
         elif isinstance(agent_interface, GridAgentInterface):
             self.agents.append(agent_interface)
         else:
-            raise ValueError("To add an agent to a marlgrid environment, call add_agent with either a GridAgentInterface object or a dictionary that can be used to initialize one.")
-
-    def seed(self, seed=1337):
-        # Seed the random number generator
-        self.np_random, _ = gym.utils.seeding.np_random(seed)
-        return [seed]
-
-    def _rand_int(self, low, high):
-        """
-        Generate random integer in [low,high[
-        """
-
-        return self.np_random.randint(low, high)
-
-    def _rand_float(self, low, high):
-        """
-        Generate random float in [low,high[
-        """
-
-        return self.np_random.uniform(low, high)
-
-    def _rand_bool(self):
-        """
-        Generate random boolean value
-        """
-
-        return self.np_random.randint(0, 2) == 0
-
-    def _rand_elem(self, iterable):
-        """
-        Pick a random element in a list
-        """
-
-        lst = list(iterable)
-        idx = self._rand_int(0, len(lst))
-        return lst[idx]
+            raise ValueError(
+                "To add an agent to a marlgrid environment, call add_agent with either a GridAgentInterface object "
+                " or a dictionary that can be used to initialize one.")
 
     def reset(self, **kwargs):
         for agent in self.agents:
@@ -428,30 +410,36 @@ class MultiGridEnv(gym.Env):
 
         self._gen_grid(self.width, self.height)
 
-        for agent in self.agents:
-            # Make sure _gen_grid initialized agent positions
-            assert (agent.pos is not None) and (agent.dir is not None)
-            # Make sure the agent doesn't overlap with an object
-            start_cell = self.grid.get(*agent.pos)
-            # assert start_cell is None or start_cell.can_overlap()
-            assert start_cell is agent
+        # for agent in self.agents:
+        #     # Make sure _gen_grid initialized agent positions
+        #     assert (agent.pos is not None) and (agent.dir is not None)
+        #     # Make sure the agent doesn't overlap with an object
+        #     start_cell = self.grid.get(*agent.pos)
+        #     # assert start_cell is None or start_cell.can_overlap()
+        #     assert start_cell is agent
 
         self.step_count = 0
         obs = self.gen_obs()
         return obs
 
     def gen_obs_grid(self, agent):
+        # If the agent is inactive, return an empty grid and a visibility mask that hides everything.
+        if not agent.active:
+            # below, not sure orientation is correct but as of 6/27/2020 that doesn't matter because
+            # agent views are usually square and this grid won't be used for anything.
+            grid = MultiGrid((agent.view_size, agent.view_size), orientation=agent.dir+1)
+            vis_mask = np.zeros((agent.view_size, agent.view_size), dtype=np.bool)
+            return grid, vis_mask
+
         topX, topY, botX, botY = agent.get_view_exts()
-        # agent_pos = agent.get_view_pos()
+
         grid = self.grid.slice(
             topX, topY, agent.view_size, agent.view_size, rot_k=agent.dir + 1
         )
 
         # Process occluders and visibility
-        # Note that this incurs some performance cost
-        # print(grid.opacity)
+        # Note that this incurs some slight performance cost
         vis_mask = agent.process_vis(grid.opacity)
-        # print(vis_mask)
 
         # Warning about the rest of the function:
         #  Allows masking away objects that the agent isn't supposed to see.
@@ -482,8 +470,10 @@ class MultiGridEnv(gym.Env):
             if agent.observe_rewards:
                 ret['reward'] = getattr(agent, 'step_reward', 0)
             if agent.observe_position:
-                ret['position'] = np.array(agent.pos)/np.array([self.width, self.height], dtype=np.float)
+                agent_pos = agent.pos if agent.pos is not None else (0,0)
+                ret['position'] = np.array(agent_pos)/np.array([self.width, self.height], dtype=np.float)
             if agent.observe_orientation:
+                agent_dir = agent_dir if agent.dir is not None else 0
                 ret['orientation'] = agent.dir
             return ret
 
@@ -687,8 +677,8 @@ class MultiGridEnv(gym.Env):
         agent_positions = self.agent_positions
         for try_no in range(max_tries):
             pos = (
-                self._rand_int(top[0], min(top[0] + size[0], self.grid.width)),
-                self._rand_int(top[1], min(top[1] + size[1], self.grid.height)),
+                self.np_random.randint(top[0], min(top[0] + size[0], self.grid.width)),
+                self.np_random.randint(top[1], min(top[1] + size[1], self.grid.height)),
             )
 
             if (
@@ -720,7 +710,7 @@ class MultiGridEnv(gym.Env):
         agent.pos = self.place_obj(agent, top=top, size=size, max_tries=max_tries)
 
         if rand_dir:
-            agent.dir = self._rand_int(0, 4)
+            agent.dir = self.np_random.randint(0, 4)
 
         return agent
 

@@ -30,7 +30,7 @@ COLOR_TO_IDX = dict({v: k for k, v in enumerate(COLORS.keys())})
 
 OBJECT_TYPES = []
 
-class ObjectTypeRegistry(type):
+class RegisteredObjectType(type):
     def __new__(meta, name, bases, class_dict):
         cls = type.__new__(meta, name, bases, class_dict)
         if name not in OBJECT_TYPES:
@@ -43,7 +43,7 @@ class ObjectTypeRegistry(type):
         return cls
 
 
-class WorldObj(metaclass=ObjectTypeRegistry):
+class WorldObj(metaclass=RegisteredObjectType):
     def __init__(self, color="worst", state=0):
         self.color = color
         self.state = state
@@ -51,7 +51,7 @@ class WorldObj(metaclass=ObjectTypeRegistry):
 
         self.agents = [] # Some objects can have agents on top (e.g. floor, open doors, etc).
         
-        self.pos_init = None
+        # self.pos_init = None
         self.pos = None
 
     @property
@@ -150,7 +150,7 @@ class GridAgent(WorldObj):
         fill_coords(img, tri_fn, COLORS[self.color])
 
 
-class BulkObj(WorldObj, metaclass=ObjectTypeRegistry):
+class BulkObj(WorldObj, metaclass=RegisteredObjectType):
     def __hash__(self):
         return hash((self.__class__, self.color, self.state, tuple(self.agents)))
 
