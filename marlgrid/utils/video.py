@@ -135,7 +135,17 @@ class GridRecorder(gym.core.Wrapper):
         'fps': 20,
         'rescale_factor': 1,
     }
-    def __init__(self, env, save_root, max_steps=1000, save_images=True, save_videos=True, auto_save_interval=None, render_kwargs={}, video_kwargs={}):
+    def __init__(
+            self,
+            env,
+            save_root,
+            max_steps=1000,
+            auto_save_images=True,
+            auto_save_videos=True,
+            auto_save_interval=None,
+            render_kwargs={},
+            video_kwargs={}
+            ):
         super().__init__(env)
 
         self.frames = None
@@ -144,8 +154,8 @@ class GridRecorder(gym.core.Wrapper):
         self.last_save = -10000
         self.recording = False
         self.save_root = self.fix_path(save_root)
-        self.save_videos = save_videos
-        self.save_images = save_images
+        self.auto_save_videos = auto_save_videos
+        self.auto_save_images = auto_save_images
         self.auto_save_interval = auto_save_interval
         self.render_kwargs = render_kwargs
         self.video_kwargs = {**self.default_video_kwargs, **video_kwargs}
@@ -162,6 +172,7 @@ class GridRecorder(gym.core.Wrapper):
     @staticmethod
     def fix_path(path):
         return os.path.abspath(os.path.expanduser(path))
+
     @property
     def should_record(self):
         if self.recording:
@@ -170,33 +181,34 @@ class GridRecorder(gym.core.Wrapper):
             return False
         return (self.reset_count - self.last_save) >= self.auto_save_interval
 
-    def export_frames(self, ident, save_root=None):
+    def export_frames(self,  episode_id=None, save_root=None):
         if save_root is None:
             save_root = self.save_root
-        if ident is None:
-            ident = f'frames_{self.reset_count}'
-        render_frames(self.frames[:self.ptr], os.path.join(self.fix_path(save_root), ident))
+        if episode_id is None:
+            episode_id = f'frames_{self.reset_count}'
+        render_frames(self.frames[:self.ptr], os.path.join(self.fix_path(save_root), episode_id))
 
-    def export_video(self,  ident, save_root=None):
+    def export_video(self, episode_id=None, save_root=None):
         if save_root is None:
             save_root = self.save_root
-        if ident is None:
-            ident = f'video_{self.reset_count}.mp4'
-        export_video(self.frames[:self.ptr],  os.path.join(self.fix_path(save_root), ident), **self.video_kwargs)
+        if episode_id is None:
+            episode_id = f'video_{self.reset_count}.mp4'
+        export_video(self.frames[:self.ptr],  os.path.join(self.fix_path(save_root), episode_id), **self.video_kwargs)
 
-    def export_both(self, ident, save_root=None):
-        self.export_frames(f'{ident}_frames', save_root=save_root)
-        self.export_video(f'{ident}.mp4', save_root=save_root)
+    def export_both(self, episode_id, save_root=None):
+        self.export_frames(f'{episode_id}_frames', save_root=save_root)
+        self.export_video(f'{episode_id}.mp4', save_root=save_root)
 
     def reset(self, **kwargs):
         if self.should_record and self.ptr>0:
             self.append_current_frame()
-            if self.save_images:
+            if self.auto_save_images:
                 self.export_frames()
-            if self.save_videos:
+            if self.auto_save_videos:
                 self.export_video()
             self.last_save = self.reset_count
-            
+        del self.frames
+        self.frames = None
         self.ptr = 0
         self.reset_count += self.n_parallel
         return self.env.reset(**kwargs)

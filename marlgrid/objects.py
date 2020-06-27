@@ -51,12 +51,18 @@ class WorldObj(metaclass=RegisteredObjectType):
 
         self.agents = [] # Some objects can have agents on top (e.g. floor, open doors, etc).
         
-        # self.pos_init = None
+        self.pos_init = None
         self.pos = None
+        self.is_agent = False
 
     @property
     def dir(self):
         return None
+
+    def set_position(self, pos):
+        if self.pos_init is None:
+            self.pos_init = pos
+        self.pos = pos
 
     @property
     def numeric_color(self):
@@ -116,11 +122,10 @@ class WorldObj(metaclass=RegisteredObjectType):
 
 
 class GridAgent(WorldObj):
-    def __init__(self, *args, color='red', **kwargs):
+    def __init__(self, *args, color='red', controller=None, **kwargs):
         super().__init__(*args, **{'color':color, **kwargs})
-        self.metadata = {
-            'color': color,
-        }
+        self.is_agent = True
+        self.controller = controller
 
     @property
     def dir(self):
@@ -140,17 +145,50 @@ class GridAgent(WorldObj):
     def can_overlap(self):
         return True
 
-    @property
-    def active(self):
-        return False
-
     def render(self, img):
         tri_fn = point_in_triangle((0.12, 0.19), (0.87, 0.50), (0.12, 0.81),)
         tri_fn = rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5 * np.pi * (self.dir))
         fill_coords(img, tri_fn, COLORS[self.color])
 
+    def render_post(self, tile):
+        if (self.controller is not None) and (self.color == 'prestige'):
+            return self.controller.prestige_color(tile)
+
+    def on_reward(self, rew):
+        if self.controller is not None:
+            return self.controller.on_reward(rew)
+
+    def on_step(self, obj):
+        if self.controller is not None:
+            return self.controller.on_step(obj)
+    
+    @property
+    def dir_vec(self):
+        """
+        Get the direction vector for the agent, pointing in the direction
+        of forward movement.
+        """
+        return np.array([[1, 0], [0, 1], [-1, 0], [0, -1]])[self.dir%4]
+
+    @property
+    def right_vec(self):
+        """
+        Get the vector pointing to the right of the agent.
+        """
+        dx, dy = self.dir_vec
+        return np.array((-dy, dx))
+
+    @property
+    def front_pos(self):
+        """
+        Get the position of the cell that is right in front of the agent
+        """
+        return np.add(self.pos, self.dir_vec)
+
+
 
 class BulkObj(WorldObj, metaclass=RegisteredObjectType):
+    # Todo: special behavior for hash, eq if the object has an agent.
     def __hash__(self):
         return hash((self.__class__, self.color, self.state, tuple(self.agents)))
 

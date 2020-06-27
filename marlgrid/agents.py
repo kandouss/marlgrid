@@ -6,15 +6,6 @@ import numba
 
 from .objects import GridAgent, BonusTile
 
-def update_config_dict(base_config, new_config):
-    novel_keys = []
-    updated_config = copy.deepcopy(base_config)
-    for k,v in new_config.items():
-        if k not in base_config:
-            novel_keys.append(k)
-        updated_config[k] = v
-    return updated_config, novel_keys
-
 class GridAgentInterface(GridAgent):
     class actions(IntEnum):
         left = 0  # Rotate left
@@ -99,7 +90,7 @@ class GridAgentInterface(GridAgent):
         self.reset(new_episode=True)
 
     def render_post(self, tile):
-        if self.done:
+        if not self.active:
             return tile
 
         blue = np.array([0,0,255])
@@ -161,8 +152,15 @@ class GridAgentInterface(GridAgent):
             else: # rew < 0
                 self.prestige = 0
 
+    def activate(self):
+        self.active = True
+
+    def deactivate(self):
+        self.active = False
+
     def reset(self, new_episode=False):
         self.done = False
+        self.active = False
         self.pos = None
         self.carrying = None
         self.mission = ""
@@ -172,12 +170,8 @@ class GridAgentInterface(GridAgent):
             self.bonuses = []
 
     def render(self, img):
-        if not self.done:
+        if self.active:
             super().render(img)
-
-    @property
-    def active(self):
-        return not self.done
 
     @property
     def dir_vec(self):
