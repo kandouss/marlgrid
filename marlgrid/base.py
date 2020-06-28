@@ -522,7 +522,7 @@ class MultiGridEnv(gym.Env):
             agent_no, (agent, action) = iter_agents[shuffled_ix]
             agent.step_reward = 0
 
-            if (agent.controller is not None) and (agent.controller.active):
+            if agent.active:
 
                 cur_pos = agent.pos[:]
                 cur_cell = self.grid.get(*cur_pos)
