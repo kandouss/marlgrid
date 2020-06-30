@@ -24,7 +24,8 @@ def register_marl_env(
     grid_size,
     view_size,
     view_tile_size=8,
-    done_condition="all",
+    view_offset=0,
+    agent_color=None,
     env_kwargs={},
 ):
     colors = ["red", "blue", "purple", "orange", "olive", "pink"]
@@ -35,11 +36,15 @@ def register_marl_env(
             instance = super(env_class, RegEnv).__new__(env_class)
             instance.__init__(
                 agents=[
-                    GridAgentInterface(color=c, view_size=view_size, view_tile_size=8)
+                    GridAgentInterface(
+                        color=c if agent_color is None else agent_color,
+                        view_size=view_size,
+                        view_tile_size=8,
+                        view_offset=view_offset,
+                        )
                     for c in colors[:n_agents]
                 ],
                 grid_size=grid_size,
-                done_condition=done_condition,
                 **env_kwargs,
             )
             return instance
@@ -77,6 +82,7 @@ register_marl_env(
     n_agents=3,
     grid_size=11,
     view_size=7,
+    env_kwargs={'clutter_density':0.15}
 )
 
 register_marl_env(
@@ -85,6 +91,7 @@ register_marl_env(
     n_agents=3,
     grid_size=15,
     view_size=7,
+    env_kwargs={'clutter_density':0.15}
 )
 
 register_marl_env(
@@ -97,4 +104,18 @@ register_marl_env(
 
 register_marl_env(
     "MarlGrid-4AgentEmpty9x9-v0", EmptyMultiGrid, n_agents=4, grid_size=9, view_size=7
+)
+
+register_marl_env(
+    "Goalcycle-demo-solo-v0", 
+    ClutteredGoalCycleEnv, 
+    n_agents=1, 
+    grid_size=13,
+    view_size=7,
+    view_tile_size=5,
+    view_offset=1,
+    env_kwargs={
+        'clutter_density':0.1,
+        'n_bonus_tiles': 3
+    }
 )

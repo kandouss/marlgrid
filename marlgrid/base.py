@@ -406,13 +406,10 @@ class MultiGridEnv(gym.Env):
 
         self._gen_grid(self.width, self.height)
 
-        # for agent in self.agents:
-        #     # Make sure _gen_grid initialized agent positions
-        #     assert (agent.pos is not None) and (agent.dir is not None)
-        #     # Make sure the agent doesn't overlap with an object
-        #     start_cell = self.grid.get(*agent.pos)
-        #     # assert start_cell is None or start_cell.can_overlap()
-        #     assert start_cell is agent
+        for agent in self.agents:
+            if agent.spawn_delay == 0:
+                self.place_obj(agent, **self.agent_spawn_kwargs)
+                agent.activate()
 
         self.step_count = 0
         obs = self.gen_obs()
