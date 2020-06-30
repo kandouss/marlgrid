@@ -6,6 +6,7 @@ import numpy as np
 import gym_minigrid
 from enum import IntEnum
 import math
+import warnings
 
 from .objects import WorldObj, Wall, Goal, Lava, GridAgent, BonusTile, BulkObj, COLORS
 from .agents import GridAgentInterface
@@ -16,6 +17,11 @@ TILE_PIXELS = 32
 
 
 class ObjectRegistry:
+    '''
+    This class contains dicts that map objects to numeric keys and vise versa.
+    Used so that grid worlds can represent objects using numerical arrays rather 
+        than lists of lists of generic objects.
+    '''
     def __init__(self, objs=[], max_num_objects=1000):
         self.key_to_obj_map = {}
         self.obj_to_key_map = {}
@@ -57,7 +63,12 @@ class ObjectRegistry:
     def obj_of_key(self, key):
         return self.key_to_obj_map[key]
 
-def rotate_grid(grid, rot_k):        
+
+def rotate_grid(grid, rot_k):
+    '''
+    This function basically replicates np.rot90 (with the correct args for rotating images).
+    But it's faster.
+    '''
     rot_k = rot_k % 4
     if rot_k==3:
         return np.moveaxis(grid[:,::-1], 0, 1)
@@ -328,7 +339,6 @@ class MultiGridEnv(gym.Env):
         width=None,
         height=None,
         max_steps=100,
-        done_condition=None,
         reward_decay=True,
         seed=1337,
         respawn=False,
@@ -339,10 +349,6 @@ class MultiGridEnv(gym.Env):
         if grid_size is not None:
             assert width == None and height == None
             width, height = grid_size, grid_size
-
-        if done_condition is not None and done_condition not in ("any", "all"):
-            raise ValueError("done_condition must be one of ['any', 'all', None].")
-        self.done_condition = done_condition
 
         self.respawn = respawn
 
@@ -361,6 +367,11 @@ class MultiGridEnv(gym.Env):
             self.add_agent(agent)
 
         self.reset()
+
+    def seed(self, seed=1337):
+        # Seed the random number generator
+        self.np_random, _ = gym.utils.seeding.np_random(seed)
+        return [seed]
 
     @property
     def action_space(self):
@@ -384,42 +395,9 @@ class MultiGridEnv(gym.Env):
         elif isinstance(agent_interface, GridAgentInterface):
             self.agents.append(agent_interface)
         else:
-            raise ValueError("To add an agent to a marlgrid environment, call add_agent with either a GridAgentInterface object or a dictionary that can be used to initialize one.")
-
-    def seed(self, seed=1337):
-        # Seed the random number generator
-        self.np_random, _ = gym.utils.seeding.np_random(seed)
-        return [seed]
-
-    def _rand_int(self, low, high):
-        """
-        Generate random integer in [low,high[
-        """
-
-        return self.np_random.randint(low, high)
-
-    def _rand_float(self, low, high):
-        """
-        Generate random float in [low,high[
-        """
-
-        return self.np_random.uniform(low, high)
-
-    def _rand_bool(self):
-        """
-        Generate random boolean value
-        """
-
-        return self.np_random.randint(0, 2) == 0
-
-    def _rand_elem(self, iterable):
-        """
-        Pick a random element in a list
-        """
-
-        lst = list(iterable)
-        idx = self._rand_int(0, len(lst))
-        return lst[idx]
+            raise ValueError(
+                "To add an agent to a marlgrid environment, call add_agent with either a GridAgentInterface object "
+                " or a dictionary that can be used to initialize one.")
 
     def reset(self, **kwargs):
         for agent in self.agents:
@@ -429,29 +407,32 @@ class MultiGridEnv(gym.Env):
         self._gen_grid(self.width, self.height)
 
         for agent in self.agents:
-            # Make sure _gen_grid initialized agent positions
-            assert (agent.pos is not None) and (agent.dir is not None)
-            # Make sure the agent doesn't overlap with an object
-            start_cell = self.grid.get(*agent.pos)
-            # assert start_cell is None or start_cell.can_overlap()
-            assert start_cell is agent
+            if agent.spawn_delay == 0:
+                self.place_obj(agent, **self.agent_spawn_kwargs)
+                agent.activate()
 
         self.step_count = 0
         obs = self.gen_obs()
         return obs
 
     def gen_obs_grid(self, agent):
+        # If the agent is inactive, return an empty grid and a visibility mask that hides everything.
+        if not agent.active:
+            # below, not sure orientation is correct but as of 6/27/2020 that doesn't matter because
+            # agent views are usually square and this grid won't be used for anything.
+            grid = MultiGrid((agent.view_size, agent.view_size), orientation=agent.dir+1)
+            vis_mask = np.zeros((agent.view_size, agent.view_size), dtype=np.bool)
+            return grid, vis_mask
+
         topX, topY, botX, botY = agent.get_view_exts()
-        # agent_pos = agent.get_view_pos()
+
         grid = self.grid.slice(
             topX, topY, agent.view_size, agent.view_size, rot_k=agent.dir + 1
         )
 
         # Process occluders and visibility
-        # Note that this incurs some performance cost
-        # print(grid.opacity)
+        # Note that this incurs some slight performance cost
         vis_mask = agent.process_vis(grid.opacity)
-        # print(vis_mask)
 
         # Warning about the rest of the function:
         #  Allows masking away objects that the agent isn't supposed to see.
@@ -482,9 +463,11 @@ class MultiGridEnv(gym.Env):
             if agent.observe_rewards:
                 ret['reward'] = getattr(agent, 'step_reward', 0)
             if agent.observe_position:
-                ret['position'] = np.array(agent.pos)/np.array([self.width, self.height], dtype=np.float)
+                agent_pos = agent.pos if agent.pos is not None else (0,0)
+                ret['position'] = np.array(agent_pos)/np.array([self.width, self.height], dtype=np.float)
             if agent.observe_orientation:
-                ret['orientation'] = agent.dir
+                agent_dir = agent.dir if agent.dir is not None else 0
+                ret['orientation'] = agent_dir
             return ret
 
     def gen_obs(self):
@@ -493,28 +476,34 @@ class MultiGridEnv(gym.Env):
     def __str__(self):
         return self.grid.__str__()
 
-    def step(self, actions):
+    def check_agent_position_integrity(self, title=''):
+        '''
+        This function checks whether each agent is present in the grid in exactly one place.
+        This is particularly helpful for validating the world state when ghost_mode=False and
+        agents can stack, since the logic for moving them around gets a bit messy.
+        Prints a message and drops into pdb if there's an inconsistency.
+        '''
+        agent_locs = [[] for _ in range(len(self.agents))]
+        for i in range(self.grid.width):
+            for j in range(self.grid.height):
+                x = self.grid.get(i,j)
+                for k,agent in enumerate(self.agents):
+                    if x==agent:
+                        agent_locs[k].append(('top', (i,j)))
+                    if hasattr(x, 'agents') and agent in x.agents:
+                        agent_locs[k].append(('stacked', (i,j)))
+        if not all([len(x)==1 for x in agent_locs]):
+            print(f"{title} > Failed integrity test!")
+            for a, al in zip(self.agents, agent_locs):
+                print(" > ", a.color,'-', al)
+            import pdb; pdb.set_trace()
 
-        def test_integrity(title=''):
-            '''
-            This function checks whether each agent is present in the grid in exactly one place.
-            This is particularly helpful for validating the world state when ghost_mode=False and
-            agents can stack.
-            '''
-            agent_locs = [[] for _ in range(len(self.agents))]
-            for i in range(self.grid.width):
-                for j in range(self.grid.height):
-                    x = self.grid.get(i,j)
-                    for k,agent in enumerate(self.agents):
-                        if x==agent:
-                            agent_locs[k].append(('top', (i,j)))
-                        if hasattr(x, 'agents') and agent in x.agents:
-                            agent_locs[k].append(('stacked', (i,j)))
-            if not all([len(x)==1 for x in agent_locs]):
-                print(f"{title} > Failed integrity test!")
-                for a, al in zip(self.agents, agent_locs):
-                    print(" > ", a.color,'-', al)
-                import pdb; pdb.set_trace()
+    def step(self, actions):
+        # Spawn agents if it's time.
+        for agent in self.agents:
+            if not agent.active and not agent.done and self.step_count >= agent.spawn_delay:
+                self.place_obj(agent, **self.agent_spawn_kwargs)
+                agent.activate()
                 
         assert len(actions) == len(self.agents)
 
@@ -632,12 +621,12 @@ class MultiGridEnv(gym.Env):
 
                 agent.on_step(fwd_cell if agent_moved else None)
 
-        if self.step_count >= self.max_steps:
-            dones = [True for agent in self.agents]
-        else:
-            dones = []
-            for agent in self.agents:
-                if agent.done and self.respawn:
+        
+        # If any of the agents individually are "done" (hit lava or in some cases a goal) 
+        #   but the env requires respawning, then respawn those agents.
+        for agent in self.agents:
+            if agent.done:
+                if self.respawn:
                     resting_place_obj = self.grid.get(*agent.pos)
                     if resting_place_obj == agent:
                         if agent.agents:
@@ -649,81 +638,78 @@ class MultiGridEnv(gym.Env):
                         resting_place_obj.agents.remove(agent)
                         resting_place_obj.agents += agent.agents[:]
                         agent.agents = []
-                            
-                    agent.reset()
-                    self.place_agent(agent, **self.agent_spawn_kwargs)
-                dones.append(agent.done)
+                        
+                    agent.reset(new_episode=False)
+                    self.place_obj(agent, **self.agent_spawn_kwargs)
+                    agent.activate()
+                else: # if the agent shouldn't be respawned, then deactivate it.
+                    agent.deactivate()
 
-        done = np.array(dones, dtype=np.bool)
-        if self.done_condition == "any":
-            done = done.any()
-        elif self.done_condition == "all":
-            done = done.all()
+        # The episode overall is done if all the agents are done, or if it exceeds the step limit.
+        done = (self.step_count >= self.max_steps) or all([agent.done for agent in self.agents])
 
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
 
         return obs, step_rewards, done, {}
 
-    @property
-    def agent_positions(self):
-        return [
-            tuple(agent.pos) if agent.pos is not None else None for agent in self.agents
-        ]
+    def put_obj(self, obj, i, j):
+        """
+        Put an object at a specific position in the grid. Replace anything that is already there.
+        """
+        self.grid.set(i, j, obj)
+        if obj is not None:
+            obj.set_position((i,j))
+        return True
 
-    def place_obj(self, obj, top=None, size=None, reject_fn=None, max_tries=math.inf):
+    def try_place_obj(self,obj, pos):
+        ''' Try to place an object at a certain position in the grid.
+        If it is possible, then do so and return True.
+        Otherwise do nothing and return False. '''
+        # grid_obj: whatever object is already at pos.
+        grid_obj = self.grid.get(*pos)
+
+        # If the target position is empty, then the object can always be placed.
+        if grid_obj is None:
+            self.grid.set(*pos, obj)
+            obj.set_position(pos)
+            return True
+
+        # Otherwise only agents can be placed, and only if the target position can_overlap.
+        if not (grid_obj.can_overlap() and obj.is_agent):
+            return False
+
+        # If ghost mode is off and there's already an agent at the target cell, the agent can't
+        #   be placed there.
+        if (not self.ghost_mode) and (grid_obj.is_agent or (len(grid_obj.agents)>0)):
+            return False
+
+        grid_obj.agents.append(obj)
+        obj.set_position(pos)
+        return True
+
+    def place_obj(self, obj, top=(0,0), size=None, reject_fn=None, max_tries=1e5):
         max_tries = int(max(1, min(max_tries, 1e5)))
-        if top is None:
-            top = (0, 0)
-        else:
-            top = (max(top[0], 0), max(top[1], 0))
+        top = (max(top[0], 0), max(top[1], 0))
         if size is None:
             size = (self.grid.width, self.grid.height)
+        bottom = (min(top[0] + size[0], self.grid.width), min(top[1] + size[1], self.grid.height))
 
-        agent_positions = self.agent_positions
+        # agent_positions = [tuple(agent.pos) if agent.pos is not None else None for agent in self.agents]
         for try_no in range(max_tries):
-            pos = (
-                self._rand_int(top[0], min(top[0] + size[0], self.grid.width)),
-                self._rand_int(top[1], min(top[1] + size[1], self.grid.height)),
-            )
-
-            if (
-                (self.grid.get(*pos) is None)
-                and (pos not in agent_positions)
-                and (reject_fn is None or (not reject_fn(pos)))
-            ):
-                break
+            pos = self.np_random.randint(top, bottom)
+            if (reject_fn is not None) and reject_fn(pos):
+                continue
+            else:
+                if self.try_place_obj(obj, pos):
+                    break
         else:
             raise RecursionError("Rejection sampling failed in place_obj.")
 
-        self.grid.set(*pos, obj)
-        if obj is not None:
-            obj.init_pos = pos
-            obj.cur_pos = pos
-
         return pos
 
-    def put_obj(self, obj, i, j):
-        """
-        Put an object at a specific position in the grid
-        """
-
-        self.grid.set(i, j, obj)
-        obj.init_pos = (i, j)
-        obj.cur_pos = (i, j)
-
-    def place_agent(self, agent, top=None, size=None, rand_dir=True, max_tries=1000):
-        agent.pos = self.place_obj(agent, top=top, size=size, max_tries=max_tries)
-        if rand_dir:
-            agent.dir = self._rand_int(0, 4)
-        return agent
-
     def place_agents(self, top=None, size=None, rand_dir=True, max_tries=1000):
-        for agent in self.agents:
-            self.place_agent(
-                agent, top=top, size=size, rand_dir=rand_dir, max_tries=max_tries
-            )
-            if hasattr(self, "mission"):
-                agent.mission = self.mission
+        # warnings.warn("Placing agents with the function place_agents is deprecated.")
+        pass
 
     def render(
         self,
@@ -754,8 +740,8 @@ class MultiGridEnv(gym.Env):
         # Compute which cells are visible to the agent
         highlight_mask = np.full((self.width, self.height), False, dtype=np.bool)
         for agent in self.agents:
-            xlow, ylow, xhigh, yhigh = agent.get_view_exts()
             if agent.active:
+                xlow, ylow, xhigh, yhigh = agent.get_view_exts()
                 dxlow, dylow = max(0, 0-xlow), max(0, 0-ylow)
                 dxhigh, dyhigh = max(0, xhigh-self.grid.width), max(0, yhigh-self.grid.height)
                 if agent.see_through_walls:

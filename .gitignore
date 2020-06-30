@@ -1,3 +1,6 @@
+# Weights and biases temp dir
+wandb/
+
 # Video files
 *.mp4
 

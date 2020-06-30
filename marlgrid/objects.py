@@ -28,22 +28,22 @@ COLORS = {
 # Used to map colors to integers
 COLOR_TO_IDX = dict({v: k for k, v in enumerate(COLORS.keys())})
 
-OBJECT_TYPE_REGISTRY = []
+OBJECT_TYPES = []
 
-class MetaRegistry(type):
+class RegisteredObjectType(type):
     def __new__(meta, name, bases, class_dict):
         cls = type.__new__(meta, name, bases, class_dict)
-        if name not in OBJECT_TYPE_REGISTRY:
-            OBJECT_TYPE_REGISTRY.append(cls)
+        if name not in OBJECT_TYPES:
+            OBJECT_TYPES.append(cls)
 
         def get_recursive_subclasses():
-            return OBJECT_TYPE_REGISTRY
+            return OBJECT_TYPES
 
         cls.recursive_subclasses = staticmethod(get_recursive_subclasses)
         return cls
 
 
-class WorldObj(metaclass=MetaRegistry):
+class WorldObj(metaclass=RegisteredObjectType):
     def __init__(self, color="worst", state=0):
         self.color = color
         self.state = state
@@ -53,10 +53,16 @@ class WorldObj(metaclass=MetaRegistry):
         
         self.pos_init = None
         self.pos = None
+        self.is_agent = False
 
     @property
     def dir(self):
         return None
+
+    def set_position(self, pos):
+        if self.pos_init is None:
+            self.pos_init = pos
+        self.pos = pos
 
     @property
     def numeric_color(self):
@@ -121,6 +127,7 @@ class GridAgent(WorldObj):
         self.metadata = {
             'color': color,
         }
+        self.is_agent = True
 
     @property
     def dir(self):
@@ -140,17 +147,14 @@ class GridAgent(WorldObj):
     def can_overlap(self):
         return True
 
-    @property
-    def active(self):
-        return False
-
     def render(self, img):
         tri_fn = point_in_triangle((0.12, 0.19), (0.87, 0.50), (0.12, 0.81),)
         tri_fn = rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5 * np.pi * (self.dir))
         fill_coords(img, tri_fn, COLORS[self.color])
 
 
-class BulkObj(WorldObj, metaclass=MetaRegistry):
+class BulkObj(WorldObj, metaclass=RegisteredObjectType):
+    # Todo: special behavior for hash, eq if the object has an agent.
     def __hash__(self):
         return hash((self.__class__, self.color, self.state, tuple(self.agents)))
 

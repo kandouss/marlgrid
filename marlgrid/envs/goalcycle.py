@@ -9,7 +9,7 @@ class ClutteredGoalCycleEnv(MultiGridEnv):
     def __init__(self, *args, reward=1, penalty=0.0, n_clutter=None, clutter_density=None, n_bonus_tiles=3, initial_reward=True, cycle_reset=False, reset_on_mistake=False, reward_decay=False, **kwargs):
         if (n_clutter is None) == (clutter_density is None):
             raise ValueError("Must provide n_clutter xor clutter_density in environment config.")
-        
+
         # Overwrite the default reward_decay for goal cycle environments.
         super().__init__(*args, **{**kwargs, 'reward_decay': reward_decay})
 

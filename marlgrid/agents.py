@@ -6,15 +6,6 @@ import numba
 
 from .objects import GridAgent, BonusTile
 
-def update_config_dict(base_config, new_config):
-    novel_keys = []
-    updated_config = copy.deepcopy(base_config)
-    for k,v in new_config.items():
-        if k not in base_config:
-            novel_keys.append(k)
-        updated_config[k] = v
-    return updated_config, novel_keys
-
 class GridAgentInterface(GridAgent):
     class actions(IntEnum):
         left = 0  # Rotate left
@@ -40,6 +31,7 @@ class GridAgentInterface(GridAgent):
             prestige_beta=0.95,
             prestige_scale=2,
             allow_negative_prestige=False,
+            spawn_delay=0,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -57,6 +49,7 @@ class GridAgentInterface(GridAgent):
         self.prestige_beta = prestige_beta
         self.prestige_scale = prestige_scale
         self.allow_negative_prestige = allow_negative_prestige
+        self.spawn_delay = spawn_delay
 
         if self.prestige_beta > 1:
             # warnings.warn("prestige_beta must be between 0 and 1. Using default 0.99")
@@ -82,7 +75,7 @@ class GridAgentInterface(GridAgent):
                 obs_space['orientation'] = gym.spaces.Discrete(n=4)
             self.observation_space = gym.spaces.Dict(obs_space)
         else:
-            raise ValueError("InteractiveAgent kwarg 'observation_style' must be one of 'image', 'rich'.")
+            raise ValueError(f"{self.__class__.__name__} kwarg 'observation_style' must be one of 'image', 'rich'.")
 
         if self.restrict_actions:
             self.action_space = gym.spaces.Discrete(3)
@@ -97,7 +90,7 @@ class GridAgentInterface(GridAgent):
         self.reset(new_episode=True)
 
     def render_post(self, tile):
-        if self.done:
+        if not self.active:
             return tile
 
         blue = np.array([0,0,255])
@@ -140,6 +133,7 @@ class GridAgentInterface(GridAgent):
             prestige_beta = self.prestige_beta,
             prestige_scale = self.prestige_scale,
             allow_negative_prestige = self.allow_negative_prestige,
+            spawn_delay = self.spawn_delay,
             **self.init_kwargs
         )
         return ret
@@ -158,8 +152,15 @@ class GridAgentInterface(GridAgent):
             else: # rew < 0
                 self.prestige = 0
 
+    def activate(self):
+        self.active = True
+
+    def deactivate(self):
+        self.active = False
+
     def reset(self, new_episode=False):
         self.done = False
+        self.active = False
         self.pos = None
         self.carrying = None
         self.mission = ""
@@ -169,12 +170,8 @@ class GridAgentInterface(GridAgent):
             self.bonuses = []
 
     def render(self, img):
-        if not self.done:
+        if self.active:
             super().render(img)
-
-    @property
-    def active(self):
-        return not self.done
 
     @property
     def dir_vec(self):
