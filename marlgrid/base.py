@@ -466,8 +466,8 @@ class MultiGridEnv(gym.Env):
                 agent_pos = agent.pos if agent.pos is not None else (0,0)
                 ret['position'] = np.array(agent_pos)/np.array([self.width, self.height], dtype=np.float)
             if agent.observe_orientation:
-                agent_dir = agent_dir if agent.dir is not None else 0
-                ret['orientation'] = agent.dir
+                agent_dir = agent.dir if agent.dir is not None else 0
+                ret['orientation'] = agent_dir
             return ret
 
     def gen_obs(self):
@@ -502,7 +502,6 @@ class MultiGridEnv(gym.Env):
         # Spawn agents if it's time.
         for agent in self.agents:
             if not agent.active and not agent.done and self.step_count >= agent.spawn_delay:
-                print("Should be spawning an agent.")
                 self.place_obj(agent, **self.agent_spawn_kwargs)
                 agent.activate()
                 
@@ -709,7 +708,8 @@ class MultiGridEnv(gym.Env):
         return pos
 
     def place_agents(self, top=None, size=None, rand_dir=True, max_tries=1000):
-        warnings.warn("Placing agents with the function place_agents is deprecated.")
+        # warnings.warn("Placing agents with the function place_agents is deprecated.")
+        pass
 
     def render(
         self,
