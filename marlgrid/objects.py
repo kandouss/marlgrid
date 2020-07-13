@@ -162,10 +162,11 @@ class BulkObj(WorldObj, metaclass=RegisteredObjectType):
         return hash(self) == hash(other)
 
 class BonusTile(WorldObj):
-    def __init__(self, reward, penalty=-0.1, bonus_id=0, n_bonus=1, initial_reward=True, reset_on_mistake=False, color='yellow', *args, **kwargs):
+    def __init__(self, reward, penalty=-0.1, reward_streak_bonus=0, bonus_id=0, n_bonus=1, initial_reward=True, reset_on_mistake=False, color='yellow', *args, **kwargs):
         super().__init__(*args, **{'color': color, **kwargs, 'state': bonus_id})
         self.reward = reward
         self.penalty = penalty
+        self.reward_streak_bonus = reward_streak_bonus
         self.n_bonus = n_bonus
         self.bonus_id = bonus_id
         self.initial_reward = initial_reward
@@ -180,30 +181,34 @@ class BonusTile(WorldObj):
     def get_reward(self, agent):
         # If the agent hasn't hit any bonus tiles, set its bonus state so that
         #  it'll get a reward from hitting this tile.
-        first_bonus = False
         if agent.bonus_state is None:
-            agent.bonus_state = (self.bonus_id - 1) % self.n_bonus
             first_bonus = True
-
-        if agent.bonus_state == self.bonus_id:
-            # This is the last bonus tile the agent hit
-            rew = -np.abs(self.penalty)
-        elif (agent.bonus_state + 1)%self.n_bonus == self.bonus_id:
-            # The agent hit the previous bonus tile before this one
-            agent.bonus_state = self.bonus_id
-            # rew = agent.bonus_value
-            rew = self.reward
         else:
+            first_bonus = False
+        
+        # If this is the first bonus tile the agent has stepped on in the episode
+        if agent.bonus_state is None:
+            agent.bonus_state = (self.bonus_id, 0)
+            rew = self.reward if self.initial_reward else 0
+
+        # If the agent last stepped on the previous tile -> should get reward
+        elif (agent.bonus_state[0] + 1)%self.n_bonus == self.bonus_id:
+            agent.bonus_state = (self.bonus_id, agent.bonus_state[1]+1)
+            rew = self.reward + self.reward_streak_bonus * agent.bonus_state[1]
+
+        # If this is the last bonus tile the agent hit
+        elif agent.bonus_state[0] == self.bonus_id:
+            agent.bonus_state = (agent.bonus_state[0], 0)
+            rew = -np.abs(self.penalty)
+        else:
+            agent.bonus_state = (agent.bonus_state[0], 0)
             # The agent hit any other bonus tile before this one
             rew = -np.abs(self.penalty)
 
         if self.reset_on_mistake:
-            agent.bonus_state = self.bonus_id
+            agent.bonus_state[0] = self.bonus_id
 
-        if first_bonus and not bool(self.initial_reward):
-            return 0
-        else:
-            return rew
+        return rew
 
     def render(self, img):
         fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])

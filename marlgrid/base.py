@@ -340,7 +340,7 @@ class MultiGridEnv(gym.Env):
         height=None,
         max_steps=100,
         reward_decay=True,
-        seed=1337,
+        seed=None,
         respawn=False,
         ghost_mode=True,
         agent_spawn_kwargs = {}
@@ -405,7 +405,6 @@ class MultiGridEnv(gym.Env):
             agent.reset(new_episode=True)
 
         self._gen_grid(self.width, self.height)
-
         # for agent in self.agents:
         #     # Make sure _gen_grid initialized agent positions
         #     assert (agent.pos is not None) and (agent.dir is not None)

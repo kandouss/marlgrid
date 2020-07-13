@@ -6,7 +6,21 @@ class ClutteredGoalCycleEnv(MultiGridEnv):
     mission = "Cycle between yellow goal tiles."
     metadata = {}
 
-    def __init__(self, *args, reward=1, penalty=0.0, n_clutter=None, clutter_density=None, n_bonus_tiles=3, initial_reward=True, cycle_reset=False, reset_on_mistake=False, reward_decay=False, **kwargs):
+    def __init__(
+            self,
+            *args,
+            reward=1,
+            reward_streak_bonus=0,
+            penalty=0.0,
+            n_clutter=None,
+            clutter_density=None,
+            n_bonus_tiles=3,
+            initial_reward=True,
+            cycle_reset=False,
+            reset_on_mistake=False,
+            reward_decay=False,
+            **kwargs,
+            ):
         if (n_clutter is None) == (clutter_density is None):
             raise ValueError("Must provide n_clutter xor clutter_density in environment config.")
 
@@ -19,6 +33,7 @@ class ClutteredGoalCycleEnv(MultiGridEnv):
             self.n_clutter = n_clutter
         
         self.reward = reward
+        self.reward_streak_bonus = reward_streak_bonus
         self.penalty = penalty
 
         self.initial_reward = initial_reward
@@ -37,6 +52,7 @@ class ClutteredGoalCycleEnv(MultiGridEnv):
                     color="yellow",
                     reward=self.reward,
                     penalty=self.penalty,
+                    reward_streak_bonus=self.reward_streak_bonus,
                     bonus_id=bonus_id,
                     n_bonus=self.n_bonus_tiles,
                     initial_reward=self.initial_reward,
