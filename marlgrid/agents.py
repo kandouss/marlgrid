@@ -25,12 +25,14 @@ class GridAgentInterface(GridAgent):
             observe_rewards=False,
             observe_position=False,
             observe_orientation=False,
+            observe_last_action = False,
             restrict_actions=False,
             see_through_walls=False,
             hide_item_types=[],
             prestige_beta=0.95,
             prestige_scale=2,
             allow_negative_prestige=False,
+            visible_prestige_bonus=0,
             spawn_delay=0,
             **kwargs):
         super().__init__(**kwargs)
@@ -42,6 +44,7 @@ class GridAgentInterface(GridAgent):
         self.observe_rewards = observe_rewards
         self.observe_position = observe_position
         self.observe_orientation = observe_orientation
+        self.observe_last_action = observe_last_action
         self.hide_item_types = hide_item_types
         self.see_through_walls = see_through_walls
         self.init_kwargs = kwargs
@@ -49,12 +52,14 @@ class GridAgentInterface(GridAgent):
         self.prestige_beta = prestige_beta
         self.prestige_scale = prestige_scale
         self.allow_negative_prestige = allow_negative_prestige
+        self.visible_prestige_bonus = visible_prestige_bonus
         self.spawn_delay = spawn_delay
 
-        if self.prestige_beta > 1:
-            # warnings.warn("prestige_beta must be between 0 and 1. Using default 0.99")
-            self.prestige_beta = 0.95
-            
+        if self.restrict_actions:
+            self.action_space = gym.spaces.Discrete(3)
+        else:
+            self.action_space = gym.spaces.Discrete(len(self.actions))
+        
         image_space = gym.spaces.Box(
             low=0,
             high=255,
@@ -73,14 +78,13 @@ class GridAgentInterface(GridAgent):
                 obs_space['position'] = gym.spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)
             if self.observe_orientation:
                 obs_space['orientation'] = gym.spaces.Discrete(n=4)
+            if self.observe_last_action:
+                obs_space['last_action'] = gym.spaces.Discrete(self.action_space.n)
+                
             self.observation_space = gym.spaces.Dict(obs_space)
         else:
             raise ValueError(f"{self.__class__.__name__} kwarg 'observation_style' must be one of 'image', 'rich'.")
 
-        if self.restrict_actions:
-            self.action_space = gym.spaces.Discrete(3)
-        else:
-            self.action_space = gym.spaces.Discrete(len(self.actions))
 
         self.metadata = {
             **self.metadata,
@@ -88,6 +92,13 @@ class GridAgentInterface(GridAgent):
             'view_tile_size': view_tile_size,
         }
         self.reset(new_episode=True)
+
+    def get_scaled_prestige(self):
+        if self.allow_negative_prestige:
+            prestige_scaled = 1/(1 + np.exp(-self.prestige/self.prestige_scale))
+        else:
+            prestige_scaled = np.tanh(self.prestige/self.prestige_scale)
+        return prestige_scaled
 
     def render_post(self, tile):
         if not self.active:
@@ -100,10 +111,7 @@ class GridAgentInterface(GridAgent):
             # Compute a scaled prestige value between 0 and 1 that will be used to 
             #   interpolate between the low-prestige (red) and high-prestige (blue)
             #   colors.
-            if self.allow_negative_prestige:
-                prestige_scaled = 1/(1 + np.exp(-self.prestige/self.prestige_scale))
-            else:
-                prestige_scaled = np.tanh(self.prestige/self.prestige_scale)
+            prestige_scaled = self.get_scaled_prestige()
 
             new_color = (
                     prestige_scaled * blue +
@@ -127,6 +135,7 @@ class GridAgentInterface(GridAgent):
             observe_rewards = self.observe_rewards,
             observe_position = self.observe_position,
             observe_orientation = self.observe_orientation,
+            observe_last_action = self.observe_last_action,
             hide_item_types = self.hide_item_types,
             restrict_actions = self.restrict_actions,
             see_through_walls=self.see_through_walls,
@@ -134,6 +143,7 @@ class GridAgentInterface(GridAgent):
             prestige_scale = self.prestige_scale,
             allow_negative_prestige = self.allow_negative_prestige,
             spawn_delay = self.spawn_delay,
+            visible_prestige_bonus=self.visible_prestige_bonus,
             **self.init_kwargs
         )
         return ret
@@ -284,8 +294,11 @@ class GridAgentInterface(GridAgent):
 
         return self.relative_coords(x, y) is not None
 
-    def sees(self, x, y):
-        raise NotImplementedError
+    def sees(self, obj):
+        if getattr(obj, 'pos', None) is None:
+            return False
+        else:
+            return self.in_view(*obj.pos)
 
     def process_vis(self, opacity_grid):
         assert len(opacity_grid.shape) == 2

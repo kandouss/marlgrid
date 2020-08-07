@@ -10,8 +10,7 @@ import warnings
 
 from .objects import WorldObj, Wall, Goal, Lava, GridAgent, BonusTile, BulkObj, COLORS
 from .agents import GridAgentInterface
-from .rendering import SimpleImageViewer
-from gym_minigrid.rendering import fill_coords, point_in_rect, downsample, highlight_img
+from .rendering import SimpleImageViewer, fill_coords, point_in_rect, downsample, highlight_img
 
 TILE_PIXELS = 32
 
@@ -275,7 +274,6 @@ class MultiGrid:
     @classmethod
     def render_tile(cls, obj, tile_size=TILE_PIXELS, subdivs=3, top_agent=None):
         subdivs = 3
-
         if obj is None:
             img = cls.cache_render_obj(obj, tile_size, subdivs)
         else:
@@ -371,6 +369,7 @@ class MultiGridEnv(gym.Env):
     def seed(self, seed=1337):
         # Seed the random number generator
         self.np_random, _ = gym.utils.seeding.np_random(seed)
+        self._set_seed = seed
         return [seed]
 
     @property
@@ -470,6 +469,8 @@ class MultiGridEnv(gym.Env):
             if agent.observe_orientation:
                 agent_dir = agent.dir if agent.dir is not None else 0
                 ret['orientation'] = agent_dir
+            if agent.observe_last_action:
+                ret['last_action'] = getattr(agent, 'last_action', 0)
             return ret
 
     def gen_obs(self):
@@ -514,12 +515,12 @@ class MultiGridEnv(gym.Env):
         self.step_count += 1
 
         iter_agents = list(enumerate(zip(self.agents, actions)))
+        
         iter_order = np.arange(len(iter_agents))
         self.np_random.shuffle(iter_order)
         for shuffled_ix in iter_order:
             agent_no, (agent, action) = iter_agents[shuffled_ix]
             agent.step_reward = 0
-
             if agent.active:
 
                 cur_pos = agent.pos[:]
@@ -527,7 +528,7 @@ class MultiGridEnv(gym.Env):
                 fwd_pos = agent.front_pos[:]
                 fwd_cell = self.grid.get(*fwd_pos)
                 agent_moved = False
-
+                
                 # Rotate left
                 if action == agent.actions.left:
                     agent.dir = (agent.dir - 1) % 4
@@ -651,6 +652,23 @@ class MultiGridEnv(gym.Env):
         done = (self.step_count >= self.max_steps) or all([agent.done for agent in self.agents])
 
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
+
+        # Give agents reward bonuses for observing other pristigious agents, if they are configured to do so.
+        for k, agent1 in enumerate(self.agents):
+            prestige_bonus_factor = getattr(agent1, 'visible_prestige_bonus', 0) or 0
+            prestige_bonus = 0
+            if prestige_bonus_factor > 0:
+                for j, agent2 in enumerate(self.agents):
+                    if k==j or not hasattr(agent2, 'get_scaled_prestige'):
+                        continue
+                    agent_distance = (np.linalg.norm(np.array(agent1.pos)-np.array(agent2.pos))).clip(1)
+                    closeness = agent1.view_tile_size/agent_distance
+                    prestige_bonus += prestige_bonus_factor * closeness
+                # print(f"Prestige bonus: {prestige_bonus}")
+                step_rewards[k] += prestige_bonus
+
+        for agent, action in zip(self.agents, actions):
+            agent.last_action = np.array(action).item()
 
         return obs, step_rewards, done, {}
 

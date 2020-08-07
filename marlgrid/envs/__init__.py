@@ -58,7 +58,7 @@ def env_from_config(env_config, randomize_seed=True):
     env_kwargs = {k:v for k,v in env_config.items() if k != 'env_class'}
     if randomize_seed:
         env_kwargs['seed'] = env_kwargs.get('seed', 0) + random.randint(0, 1337*1337)
-    
+    # print(f"Creating env with seed {env_kwargs.get('seed', 0)}.")
     return env_class(**env_kwargs)
 
 
