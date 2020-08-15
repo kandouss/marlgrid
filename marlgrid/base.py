@@ -228,13 +228,13 @@ class MultiGrid:
         return np.copy(cls.tile_cache[key])
 
     @classmethod
-    def cache_render_obj(cls, obj, tile_size, subdivs):
+    def cache_render_obj(cls, obj, tile_size, subdivs, downsample_mode):
         if obj is None:
-            return cls.cache_render_fun((tile_size, None), cls.empty_tile, tile_size, subdivs)
+            return cls.cache_render_fun((tile_size, None), cls.empty_tile, tile_size, subdivs, downsample_mode)
         else:
             img = cls.cache_render_fun(
-                (tile_size, obj.__class__.__name__, *obj.encode()),
-                cls.render_object, obj, tile_size, subdivs
+                (tile_size, subdivs, downsample_mode, obj.__class__.__name__, *obj.encode()),
+                cls.render_object, obj, tile_size, subdivs, downsample_mode
             )
             if hasattr(obj, 'render_post'):
                 return obj.render_post(img)
@@ -242,19 +242,17 @@ class MultiGrid:
                 return img
 
     @classmethod
-    def empty_tile(cls, tile_size, subdivs):
+    def empty_tile(cls, tile_size, subdivs, downsample_mode):
         alpha = max(0, min(20, tile_size-10))
         img = np.full((tile_size, tile_size, 3), alpha, dtype=np.uint8)
         img[1:,:-1] = 0
         return img
 
     @classmethod
-    def render_object(cls, obj, tile_size, subdivs):
+    def render_object(cls, obj, tile_size, subdivs, downsample_mode):
         img = np.zeros((tile_size*subdivs,tile_size*subdivs, 3), dtype=np.uint8)
         obj.render(img)
-        # if 'Agent' not in obj.type and len(obj.agents) > 0:
-        #     obj.agents[0].render(img)
-        return downsample(img, subdivs).astype(np.uint8)
+        return downsample(img, subdivs, downsample_mode).astype(np.uint8)
 
     @classmethod
     def blend_tiles(cls, img1, img2):
@@ -272,34 +270,33 @@ class MultiGrid:
         ).astype(img1.dtype)
 
     @classmethod
-    def render_tile(cls, obj, tile_size=TILE_PIXELS, subdivs=3, top_agent=None):
-        subdivs = 3
+    def render_tile(cls, obj, tile_size=TILE_PIXELS, subdivs=3, downsample_mode='mean', top_agent=None):
+        render_args = (tile_size, subdivs, downsample_mode)
         if obj is None:
-            img = cls.cache_render_obj(obj, tile_size, subdivs)
+            img = cls.cache_render_obj(obj, *render_args)
         else:
             if ('Agent' in obj.type) and (top_agent in obj.agents):
                 # If the tile is a stack of agents that includes the top agent, then just render the top agent.
-                img = cls.cache_render_obj(top_agent, tile_size, subdivs)
+                img = cls.cache_render_obj(top_agent, *render_args)
             else: 
                 # Otherwise, render (+ downsize) the item in the tile.
-                img = cls.cache_render_obj(obj, tile_size, subdivs)
+                img = cls.cache_render_obj(obj, *render_args)
                 # If the base obj isn't an agent but has agents on top, render an agent and blend it in.
                 if len(obj.agents)>0 and 'Agent' not in obj.type:
                     if top_agent in obj.agents:
-                        img_agent = cls.cache_render_obj(top_agent, tile_size, subdivs)
+                        img_agent = cls.cache_render_obj(top_agent, *render_args)
                     else:
-                        img_agent = cls.cache_render_obj(obj.agents[0], tile_size, subdivs)
+                        img_agent = cls.cache_render_obj(obj.agents[0], *render_args)
                     img = cls.blend_tiles(img, img_agent)
 
             # Render the tile border if any of the corners are black.
             if (img[([0,0,-1,-1],[0,-1,0,-1])]==0).all(axis=-1).any():
-                img = img + cls.cache_render_fun((tile_size, None), cls.empty_tile, tile_size, subdivs)
+                img = img + cls.cache_render_fun((tile_size, None), cls.empty_tile, *render_args)
         return img
 
-    def render(self, tile_size, highlight_mask=None, visible_mask=None, top_agent=None):
+    def render(self, tile_size, highlight_mask=None, visible_mask=None, top_agent=None, downsample_mode='mean'):
         width_px = self.width * tile_size
         height_px = self.height * tile_size
-
         img = np.zeros(shape=(height_px, width_px), dtype=np.uint8)[...,None]+COLORS['shadow']
 
         for j in range(0, self.height):
@@ -311,7 +308,8 @@ class MultiGrid:
                 tile_img = MultiGrid.render_tile(
                     obj,
                     tile_size=tile_size,
-                    top_agent=top_agent
+                    top_agent=top_agent,
+                    downsample_mode=downsample_mode
                 )
 
                 ymin = j * tile_size
@@ -456,7 +454,7 @@ class MultiGridEnv(gym.Env):
         Generate the agent's view (partially observable, low-resolution encoding)
         """
         grid, vis_mask = self.gen_obs_grid(agent)
-        grid_image = grid.render(tile_size=agent.view_tile_size, visible_mask=vis_mask, top_agent=agent)
+        grid_image = grid.render(tile_size=agent.view_tile_size, visible_mask=vis_mask, top_agent=agent, downsample_mode=agent.view_downsample_mode)
         if agent.observation_style=='image':
             return grid_image
         else:

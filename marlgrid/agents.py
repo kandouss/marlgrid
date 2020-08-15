@@ -34,6 +34,7 @@ class GridAgentInterface(GridAgent):
             allow_negative_prestige=False,
             visible_prestige_bonus=0,
             spawn_delay=0,
+            view_downsample_mode='max',
             **kwargs):
         super().__init__(**kwargs)
 
@@ -54,6 +55,7 @@ class GridAgentInterface(GridAgent):
         self.allow_negative_prestige = allow_negative_prestige
         self.visible_prestige_bonus = visible_prestige_bonus
         self.spawn_delay = spawn_delay
+        self.view_downsample_mode = view_downsample_mode
 
         if self.restrict_actions:
             self.action_space = gym.spaces.Discrete(3)
@@ -144,6 +146,7 @@ class GridAgentInterface(GridAgent):
             allow_negative_prestige = self.allow_negative_prestige,
             spawn_delay = self.spawn_delay,
             visible_prestige_bonus=self.visible_prestige_bonus,
+            view_downsample_mode=self.view_downsample_mode,
             **self.init_kwargs
         )
         return ret

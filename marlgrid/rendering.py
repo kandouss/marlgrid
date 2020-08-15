@@ -12,7 +12,6 @@ def downsample(img, factor, mode='mean'):
     assert img.shape[1] % factor == 0
 
     img = img.reshape([img.shape[0]//factor, factor, img.shape[1]//factor, factor, 3])
-
     if mode == 'max':
         return img.max(axis=3).max(axis=1)
     else:
