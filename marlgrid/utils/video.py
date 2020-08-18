@@ -29,9 +29,9 @@ def export_video(X, outfile, fps=30, rescale_factor=2):
     getframe = lambda t: make_frame(min(int(t * fps), len(X) - 1))
     clip = mpy.VideoClip(getframe, duration=len(X) / fps)
 
-    outfile = os.path.abspath(os.path.expanduser(outfile))
-    if not os.path.isdir(os.path.dirname(outfile)):
-        os.makedirs(os.path.dirname(outfile))
+    # outfile = os.path.abspath(os.path.expanduser(outfile))
+    # if not os.path.isdir(os.path.dirname(outfile)):
+    #     os.makedirs(os.path.dirname(outfile))
     clip.write_videofile(outfile, fps=fps)
 
 
@@ -94,7 +94,10 @@ class GridRecorder(gym.core.Wrapper):
     
     @staticmethod
     def fix_path(path):
-        return os.path.abspath(os.path.expanduser(path))
+        if path is not None:
+            return os.path.abspath(os.path.expanduser(path))
+        else:
+            return None
 
     @property
     def should_record(self):
@@ -121,6 +124,9 @@ class GridRecorder(gym.core.Wrapper):
     def export_both(self, episode_id, save_root=None):
         self.export_frames(f'{episode_id}_frames', save_root=save_root)
         self.export_video(f'{episode_id}.mp4', save_root=save_root)
+
+    def video_to_file(self, file_path):
+        export_video(self.frames[:self.ptr], file_path)
 
     def reset(self, **kwargs):
         if self.should_record and self.ptr>0:
