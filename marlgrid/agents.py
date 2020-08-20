@@ -34,7 +34,7 @@ class GridAgentInterface(GridAgent):
             allow_negative_prestige=False,
             visible_prestige_bonus=0,
             spawn_delay=0,
-            view_downsample_mode='max',
+            view_downsample_mode='mean',
             **kwargs):
         super().__init__(**kwargs)
 
