@@ -46,15 +46,15 @@ env_config =  {
 }
 
 player_interface_config = {
-    "view_size": 9,
-    "view_offset": 2,
-    "view_tile_size": 15,
+    "view_size": 7,
+    "view_offset": 1,
+    "view_tile_size": 11,
     "observation_style": "rich",
     "see_through_walls": False,
     "color": "prestige"
 }
 
-# Add the agent configuration to the list of agents.
+# Add the player/agent config to the environment config (as expected by "env_from_config" below)
 env_config['agents'] = [player_interface_config]
 
 # Create the environment based on the combined env/player config
@@ -72,6 +72,8 @@ human.start_episode()
 done = False
 while not done:
 
+    env.render() # OPTIONAL: render the whole scene + birds eye view
+    
     player_action = human.action_step(obs_list[0]['pov'])
     # The environment expects a list of actions, so put the player action into a list
     agent_actions = [player_action]
