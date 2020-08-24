@@ -26,7 +26,7 @@ class HumanPlayer:
     
     def end_episode(self):
         print(
-            f"Finished episode {episode_count} after {self.step_count} steps."
+            f"Finished episode {self.episode_count} after {self.step_count} steps."
             f"  Episode return was {self.cumulative_reward}."
         )
         self.episode_count += 1
