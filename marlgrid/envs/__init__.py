@@ -5,6 +5,7 @@ from .doorkey import DoorKeyEnv
 from .cluttered import ClutteredMultiGrid
 from .goalcycle import ClutteredGoalCycleEnv
 from .viz_test import VisibilityTestEnv
+from .fourroom import FourRoom
 
 from ..agents import GridAgentInterface
 from gym.envs.registration import register as gym_register
