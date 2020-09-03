@@ -739,7 +739,8 @@ class MultiGridEnv(gym.Env):
         max_agents_per_col=3,
         agent_col_width_frac = 0.3,
         agent_col_padding_px = 2,
-        pad_grey = 100
+        pad_grey = 100,
+        highlight_views=None,
     ):
         """
         Render the whole-grid human view
@@ -779,6 +780,23 @@ class MultiGridEnv(gym.Env):
             X, np.ones((int(rescale_factor), int(rescale_factor), 1))
         )
 
+        if highlight_views is not None:
+            agent_colors = []
+            for agent in self.agents:
+                (x_top, y_top, x_bot, y_bot) = np.array(agent.get_view_exts()) * tile_size
+                border=max(1, tile_size//10)
+                def blend(arr, color, alpha):
+                    arr[:] = (arr*(1.-alpha) + color*alpha).clip(0,255).astype(arr.dtype)
+                    return arr
+                color = agent.actual_color()
+                agent_colors.append(color)
+                blend_alpha = 0.5
+                blend(img[ y_top+border : y_bot-border ,  x_top         : x_top+border, :], color, blend_alpha)
+                blend(img[ y_top+border : y_bot-border ,  x_bot-border  : x_bot,        :], color, blend_alpha)
+                blend(img[ y_top        : y_top+border ,  x_top         : x_bot,        :], color, blend_alpha)
+                blend(img[ y_bot-border : y_bot        ,  x_top         : x_bot,        :], color, blend_alpha)
+                # print(img[x_top:x_top+border, y_bot:y_top, :])
+                # import pdb; pdb.set_trace()
         if show_agent_views:
 
             target_partial_width = int(img.shape[0]*agent_col_width_frac-2*agent_col_padding_px)
@@ -786,7 +804,23 @@ class MultiGridEnv(gym.Env):
 
             agent_views = [self.gen_agent_obs(agent) for agent in self.agents]
             agent_views = [view['pov'] if isinstance(view, dict) else view for view in agent_views]
+            
+            
             agent_views = [rescale(view, min(target_partial_width/view.shape[0], target_partial_height/view.shape[1])) for view in agent_views]
+
+
+            if highlight_views is not None:
+                blended_colors = [blend(color, pad_grey, 1-blend_alpha) for color in agent_colors]
+                # print(blended_colors)
+
+                agent_views = [
+                        np.stack([
+                            np.pad(view[:,:,k], ((border, border), (border, border)), mode='constant', constant_values=color[k])
+                            for k in range(3)
+                        ], axis=-1)
+                     for view, color in zip(agent_views, blended_colors)]
+                print(agent_views[0][0].shape)
+
             # import pdb; pdb.set_trace()
             agent_views = [agent_views[pos:pos+max_agents_per_col] for pos in range(0, len(agent_views), max_agents_per_col)]
 

@@ -6,10 +6,10 @@ class FourRoom(MultiGridEnv):
     mission = "get to the green square"
     metadata = {}
 
-    def __init__(self, *args, n_clutter=None, clutter_density=None, randomize_goal=True, **kwargs):
+    def __init__(self, *args, n_clutter=None, clutter_density=None, randomize_goal=True, goal_color='green', **kwargs):
         if (n_clutter is None) == (clutter_density is None):
             raise ValueError("Must provide n_clutter xor clutter_density in environment config.")
-
+        self.goal_color = 'green'
         super().__init__(*args, **kwargs)
 
         if clutter_density is not None:
@@ -18,10 +18,10 @@ class FourRoom(MultiGridEnv):
             self.n_clutter = n_clutter
 
         self.randomize_goal = randomize_goal
+        self.goal_color = goal_color
 
 
         # self.reset()
-
 
     def _gen_grid(self, width, height):
         self.grid = MultiGrid((width, height))
@@ -43,9 +43,9 @@ class FourRoom(MultiGridEnv):
                 if (1<x<self.width-1) and (1<y<self.height-1)
             ]
             goal_pos = candidates[self.np_random.randint(0, len(candidates))]
-            self.put_obj(Goal(color="green", reward=1), *goal_pos)
+            self.put_obj(Goal(color=self.goal_color, reward=1), *goal_pos)
         else:
-            self.put_obj(Goal(color="green", reward=1), width - 2, height - 2)
+            self.put_obj(Goal(color=self.goal_color, reward=1), width - 2, height - 2)
         for _ in range(getattr(self, 'n_clutter', 0)):
             self.place_obj(Wall(), max_tries=100)
 
@@ -53,8 +53,6 @@ class FourRoom(MultiGridEnv):
         self.grid.set(self.width//2, self.height//4, None)
         self.grid.set((3*self.width-1)//4, self.height//2, None)
         self.grid.set(self.width//2, (3*self.height-1)//4, None)
-        # self.grid.set(self.width//2, (3*self.height-1)//4, None)
-        # self.grid.set((3*self.width-1)//4, (3*self.height-1)//4, None)
 
         self.agent_spawn_kwargs = {
             'top': (1,1),

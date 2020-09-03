@@ -4,7 +4,7 @@ from enum import IntEnum
 import warnings
 import numba
 
-from .objects import GridAgent, BonusTile
+from .objects import GridAgent, BonusTile, COLORS
 
 class GridAgentInterface(GridAgent):
     class actions(IntEnum):
@@ -102,6 +102,22 @@ class GridAgentInterface(GridAgent):
             prestige_scaled = np.tanh(self.prestige/self.prestige_scale)
         return prestige_scaled
 
+    def actual_color(self):
+        blue = np.array([0,0,255])
+        red = np.array([255,0,0])
+
+        if self.color == 'prestige':
+            # Compute a scaled prestige value between 0 and 1 that will be used to 
+            #   interpolate between the low-prestige (red) and high-prestige (blue)
+            #   colors.
+            prestige_scaled = self.get_scaled_prestige()
+            return (
+                    prestige_scaled * blue +
+                    (1.-prestige_scaled) * red
+                ).astype(np.int)
+        else:
+            return COLORS[self.color]
+
     def render_post(self, tile):
         if not self.active:
             return tile
@@ -113,12 +129,7 @@ class GridAgentInterface(GridAgent):
             # Compute a scaled prestige value between 0 and 1 that will be used to 
             #   interpolate between the low-prestige (red) and high-prestige (blue)
             #   colors.
-            prestige_scaled = self.get_scaled_prestige()
-
-            new_color = (
-                    prestige_scaled * blue +
-                    (1.-prestige_scaled) * red
-                ).astype(np.int)
+            new_color = self.actual_color()
 
             grey_pixels = (np.diff(tile, axis=-1)==0).all(axis=-1)
 
@@ -127,7 +138,8 @@ class GridAgentInterface(GridAgent):
             return tile
         else:
             return tile
-
+    def encode(self, *args, **kwargs):
+        return tuple((*super().encode(), self.active))
     def clone(self):
         ret =  self.__class__(
             view_size = self.view_size,
