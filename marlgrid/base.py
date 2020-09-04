@@ -370,6 +370,9 @@ class MultiGridEnv(gym.Env):
         self._set_seed = seed
         return [seed]
 
+    def agents_done(self):
+        return [(not agent.active) for agent in self.agents]
+        
     @property
     def action_space(self):
         return gym.spaces.Tuple(
