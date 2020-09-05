@@ -336,6 +336,7 @@ class MultiGridEnv(gym.Env):
         height=None,
         max_steps=100,
         reward_decay=True,
+        finish_separately=False,
         seed=None,
         respawn=False,
         ghost_mode=True,
@@ -347,6 +348,7 @@ class MultiGridEnv(gym.Env):
             width, height = grid_size, grid_size
 
         self.respawn = respawn
+        self.finish_separately = finish_separately
 
         self.window = None
 
@@ -503,6 +505,7 @@ class MultiGridEnv(gym.Env):
             import pdb; pdb.set_trace()
 
     def step(self, actions):
+        was_done = [agent.done for agent in self.agents]
         # Spawn agents if it's time.
         for agent in self.agents:
             if not agent.active and not agent.done and self.step_count >= agent.spawn_delay:
@@ -650,7 +653,10 @@ class MultiGridEnv(gym.Env):
                     agent.deactivate()
 
         # The episode overall is done if all the agents are done, or if it exceeds the step limit.
-        done = (self.step_count >= self.max_steps) or all([agent.done for agent in self.agents])
+        if self.finish_separately:
+            done = [((self.step_count >= self.max_steps) or wd) for wd in was_done]
+        else:
+            done = (self.step_count >= self.max_steps) or all(was_done)
 
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
 

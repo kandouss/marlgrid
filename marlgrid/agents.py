@@ -33,6 +33,7 @@ class GridAgentInterface(GridAgent):
             prestige_scale=2,
             allow_negative_prestige=False,
             visible_prestige_bonus=0,
+            remove_when_done=True,
             spawn_delay=0,
             view_downsample_mode='mean',
             **kwargs):
@@ -56,6 +57,7 @@ class GridAgentInterface(GridAgent):
         self.visible_prestige_bonus = visible_prestige_bonus
         self.spawn_delay = spawn_delay
         self.view_downsample_mode = view_downsample_mode
+        self.remove_when_done = remove_when_done
 
         if self.restrict_actions:
             self.action_space = gym.spaces.Discrete(3)
@@ -119,8 +121,8 @@ class GridAgentInterface(GridAgent):
             return COLORS[self.color]
 
     def render_post(self, tile):
-        if not self.active:
-            return tile
+        # if not self.active and self.remove_when_done:
+        #     return tile
 
         blue = np.array([0,0,255])
         red = np.array([255,0,0])
@@ -159,6 +161,7 @@ class GridAgentInterface(GridAgent):
             spawn_delay = self.spawn_delay,
             visible_prestige_bonus=self.visible_prestige_bonus,
             view_downsample_mode=self.view_downsample_mode,
+            remove_when_done = self.remove_when_done,
             **self.init_kwargs
         )
         return ret
@@ -195,8 +198,10 @@ class GridAgentInterface(GridAgent):
             self.bonuses = []
 
     def render(self, img):
-        if self.active:
-            super().render(img)
+        # if ((not self.done) and self.remove_when_done):
+        super().render(img)
+        # else:
+        #     print("Not rendering!")
 
     @property
     def dir_vec(self):
