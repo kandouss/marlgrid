@@ -26,6 +26,7 @@ class GridAgentInterface(GridAgent):
             observe_position=False,
             observe_orientation=False,
             observe_last_action = False,
+            observe_goal_location = False,
             restrict_actions=False,
             see_through_walls=False,
             hide_item_types=[],
@@ -49,6 +50,7 @@ class GridAgentInterface(GridAgent):
         self.observe_last_action = observe_last_action
         self.hide_item_types = hide_item_types
         self.see_through_walls = see_through_walls
+        self.observe_goal_location = observe_goal_location
         self.init_kwargs = kwargs
         self.restrict_actions = restrict_actions
         self.prestige_beta = prestige_beta
@@ -84,6 +86,8 @@ class GridAgentInterface(GridAgent):
                 obs_space['orientation'] = gym.spaces.Discrete(n=4)
             if self.observe_last_action:
                 obs_space['last_action'] = gym.spaces.Discrete(self.action_space.n)
+            if self.observe_goal_location:
+                obs_space['goal_position'] = gym.spaces.Box(low=0, high=1, shape=(2,), dtype=np.float32)
                 
             self.observation_space = gym.spaces.Dict(obs_space)
         else:
@@ -152,6 +156,7 @@ class GridAgentInterface(GridAgent):
             observe_position = self.observe_position,
             observe_orientation = self.observe_orientation,
             observe_last_action = self.observe_last_action,
+            observe_goal_location = self.observe_goal_location,
             hide_item_types = self.hide_item_types,
             restrict_actions = self.restrict_actions,
             see_through_walls=self.see_through_walls,

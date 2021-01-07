@@ -42,24 +42,33 @@ class ClutteredGoalCycleEnv(MultiGridEnv):
 
         self.bonus_tiles = []
 
+    def get_goal_location(self, agent):
+        if not hasattr(self, 'bonus_tiles'):
+            return np.array([0,0])
+        if agent.bonus_state is None:
+            tgt_bonus_id = 0
+        else:
+            tgt_bonus_id = agent.bonus_state[0] + 1
+        return self.bonus_tiles[tgt_bonus_id%self.n_bonus_tiles].pos
+
     def _gen_grid(self, width, height):
         self.grid = MultiGrid((width, height))
         self.grid.wall_rect(0, 0, width, height)
 
         for bonus_id in range(getattr(self, 'n_bonus_tiles', 0)):
-            self.place_obj(
-                BonusTile(
-                    color="yellow",
-                    reward=self.reward,
-                    penalty=self.penalty,
-                    reward_streak_bonus=self.reward_streak_bonus,
-                    bonus_id=bonus_id,
-                    n_bonus=self.n_bonus_tiles,
-                    initial_reward=self.initial_reward,
-                    reset_on_mistake=self.reset_on_mistake,
-                ),
-                max_tries=100
+            bonus_tile = BonusTile(
+                color="yellow",
+                reward=self.reward,
+                penalty=self.penalty,
+                reward_streak_bonus=self.reward_streak_bonus,
+                bonus_id=bonus_id,
+                n_bonus=self.n_bonus_tiles,
+                initial_reward=self.initial_reward,
+                reset_on_mistake=self.reset_on_mistake,
             )
+            self.place_obj(bonus_tile, max_tries=100)
+            self.bonus_tiles.append(bonus_tile)
+
         for _ in range(getattr(self, 'n_clutter', 0)):
             self.place_obj(Wall(), max_tries=100)
 

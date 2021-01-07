@@ -373,7 +373,8 @@ class MultiGridEnv(gym.Env):
         return [seed]
 
     def agents_done(self):
-        return [(not agent.active) for agent in self.agents]
+        # return [(not agent.active) for agent in self.agents]
+        return [agent.done for agent in self.agents]
         
     @property
     def action_space(self):
@@ -469,6 +470,8 @@ class MultiGridEnv(gym.Env):
             if agent.observe_position:
                 agent_pos = agent.pos if agent.pos is not None else (0,0)
                 ret['position'] = np.array(agent_pos)/np.array([self.width, self.height], dtype=np.float)
+            if agent.observe_goal_location:
+                ret['goal_position'] = self.get_goal_location(agent)/np.array([self.width, self.height], dtype=np.float)
             if agent.observe_orientation:
                 agent_dir = agent.dir if agent.dir is not None else 0
                 ret['orientation'] = agent_dir
@@ -476,6 +479,14 @@ class MultiGridEnv(gym.Env):
                 ret['last_action'] = getattr(agent, 'last_action', 0)
             return ret
 
+    def get_goal_location(self, agent):
+        goals = [v for k,v in self.grid.obj_reg.key_to_obj_map.items() if isinstance(v, Goal)]
+        if len(goals) > 0:
+            return np.array([0,0])
+        else:
+            return goals[0].pos
+
+        import pdb; pdb.set_trace()
     def gen_obs(self):
         return [self.gen_agent_obs(agent) for agent in self.agents]
 
@@ -652,12 +663,6 @@ class MultiGridEnv(gym.Env):
                 else: # if the agent shouldn't be respawned, then deactivate it.
                     agent.deactivate()
 
-        # The episode overall is done if all the agents are done, or if it exceeds the step limit.
-        if self.finish_separately:
-            done = [((self.step_count >= self.max_steps) or wd) for wd in was_done]
-        else:
-            done = (self.step_count >= self.max_steps) or all(was_done)
-
         obs = [self.gen_agent_obs(agent) for agent in self.agents]
 
         # Give agents reward bonuses for observing other pristigious agents, if they are configured to do so.
@@ -676,6 +681,23 @@ class MultiGridEnv(gym.Env):
 
         for agent, action in zip(self.agents, actions):
             agent.last_action = np.array(action).item()
+
+        for agent in self.agents:
+            if self.step_count >= self.max_steps:
+                agent.done = True
+        if self.finish_separately:
+            done = [agent.done for agent in self.agents]
+        else:
+            done = all([agent.done for agent in self.agents])
+        # for agent in self.agents:
+        #     if 
+        # # The episode overall is done if all the agents are done, or if it exceeds the step limit.
+        # if self.finish_separately:
+        #     done = [a]
+        #     done = [((self.step_count >= self.max_steps) or wd) for wd in was_done]
+        # else:
+        #     done = (self.step_count >= self.max_steps) or all(was_done)
+
 
         return obs, step_rewards, done, {}
 
