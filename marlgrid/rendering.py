@@ -1,6 +1,7 @@
 import pyglet
 import math
 import numpy as np
+import sys
 
 
 def downsample(img, factor, mode='mean'):

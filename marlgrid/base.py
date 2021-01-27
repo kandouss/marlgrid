@@ -146,8 +146,8 @@ class MultiGrid:
         return sub_grid
 
     def set(self, i, j, obj):
-        assert i >= 0 and i < self.width
-        assert j >= 0 and j < self.height
+        assert i >= 0 and i < self.width, (i, self.width)
+        assert j >= 0 and j < self.height, (j, self.height)
         self.grid[i, j] = self.obj_reg.get_key(obj)
 
     def get(self, i, j):
@@ -366,6 +366,11 @@ class MultiGridEnv(gym.Env):
 
         self.reset()
 
+    def close(self):
+        if self.window:
+            self.window.close()
+        return super().close()
+        
     def seed(self, seed=1337):
         # Seed the random number generator
         self.np_random, _ = gym.utils.seeding.np_random(seed)
@@ -811,23 +816,48 @@ class MultiGridEnv(gym.Env):
             X, np.ones((int(rescale_factor), int(rescale_factor), 1))
         )
 
+        border=max(1, tile_size//10)
+        blend_alpha = 0.7
+        def blend(arr, color, alpha):
+            arr[:] = (arr*(1.-alpha) + color*alpha).clip(0,255).astype(arr.dtype)
+            return arr
+
         if highlight_views is not None:
             agent_colors = []
-            for agent in self.agents:
-                (x_top, y_top, x_bot, y_bot) = np.array(agent.get_view_exts()) * tile_size
-                border=max(1, tile_size//10)
-                def blend(arr, color, alpha):
-                    arr[:] = (arr*(1.-alpha) + color*alpha).clip(0,255).astype(arr.dtype)
-                    return arr
-                color = agent.actual_color()
+            # for agent in self.agents:
+            #     (x_top, y_top, x_bot, y_bot) = np.array(agent.get_view_exts()) * tile_size
+            #     border=max(1, tile_size//10)
+            #     def blend(arr, color, alpha):
+            #         arr[:] = (arr*(1.-alpha) + color*alpha).clip(0,255).astype(arr.dtype)
+            #         return arr
+            #     color = agent.actual_color()
+            for ano, agent in enumerate(self.agents):
+                if highlight_views == 'rbb':
+                    color = np.array(COLORS['red'] if ano==0 else COLORS['blue'])
+                else:
+                    color = agent.actual_color()
                 agent_colors.append(color)
-                blend_alpha = 0.5
-                blend(img[ y_top+border : y_bot-border ,  x_top         : x_top+border, :], color, blend_alpha)
-                blend(img[ y_top+border : y_bot-border ,  x_bot-border  : x_bot,        :], color, blend_alpha)
-                blend(img[ y_top        : y_top+border ,  x_top         : x_bot,        :], color, blend_alpha)
-                blend(img[ y_bot-border : y_bot        ,  x_top         : x_bot,        :], color, blend_alpha)
+                # blend_alpha = 0.5
+                # blend(img[ y_top+border : y_bot-border ,  x_top         : x_top+border, :], color, blend_alpha)
+                # blend(img[ y_top+border : y_bot-border ,  x_bot-border  : x_bot,        :], color, blend_alpha)
+                # blend(img[ y_top        : y_top+border ,  x_top         : x_bot,        :], color, blend_alpha)
+                # blend(img[ y_bot-border : y_bot        ,  x_top         : x_bot,        :], color, blend_alpha)
                 # print(img[x_top:x_top+border, y_bot:y_top, :])
                 # import pdb; pdb.set_trace()
+                if not agent.active:
+                    continue
+                (x_top, y_top, x_bot, y_bot) = np.array(agent.get_view_exts()) * tile_size
+                border_rect_coords = [
+                    (y_top+border, y_bot-border, x_top, x_top+border),
+                    (y_top+border,y_bot-border,x_bot-border, x_bot),
+                    (y_top, y_top+border, x_top, x_bot),
+                    (y_bot-border, y_bot, x_top, x_bot)
+                ]
+                for slicebounds in border_rect_coords:
+                    a,b = [min(max(0, x), self.width*tile_size) for x in slicebounds[:2]]
+                    c,d = [min(max(0, x), self.height*tile_size) for x in slicebounds[2:]]
+                    # print(a,b,c,d, slicebounds)
+                    blend(img[a:b,c:d,:], color, blend_alpha)
         if show_agent_views:
 
             target_partial_width = int(img.shape[0]*agent_col_width_frac-2*agent_col_padding_px)
