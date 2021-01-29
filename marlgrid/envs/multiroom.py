@@ -29,7 +29,7 @@ class Room:
         self.entry_pos = (self.entry_pos[0] + dx, self.entry_pos[1] + dy)
         self.exit_pos = (self.exit_pos[0] + dx, self.exit_pos[1] + dy)
 
-class MultiRoomEnv(MultiGridEnv):
+class MultiRoom(MultiGridEnv):
     """
     Environment with multiple rooms (subgoals)
     """

@@ -6,6 +6,8 @@ from .cluttered import ClutteredMultiGrid
 from .goalcycle import ClutteredGoalCycleEnv
 from .viz_test import VisibilityTestEnv
 from .fourroom import FourRoom
+from .multiroom import MultiRoom
+from .maze import Maze
 
 from ..agents import GridAgentInterface
 from gym.envs.registration import register as gym_register

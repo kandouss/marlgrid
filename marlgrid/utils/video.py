@@ -2,7 +2,13 @@ import gym
 import numpy as np
 import os
 import tqdm
+import numba
 
+def rescale_video(video_array, scale):
+    t, h, w, c = video_array.shape
+    out = np.empty((t, h, scale, w, scale, c), video_array.dtype)
+    out[...] = video_array[:, :, None, :, None, :]
+    return out.reshape(t, h*scale, w*scale, c)
 
 def export_video(X, outfile, fps=30, rescale_factor=2):
 
@@ -12,23 +18,19 @@ def export_video(X, outfile, fps=30, rescale_factor=2):
         raise ImportError(
             "GridRecorder requires moviepy library. Try installing:\n $ pip install moviepy"
         )
-
+    
     if isinstance(X, list):
         X = np.stack(X)
 
     if isinstance(X, np.float) and X.max() < 1:
         X = (X * 255).astype(np.uint8).clip(0, 255)
 
-    if rescale_factor is not None and rescale_factor != 1:
-        X = np.kron(X, np.ones((1, rescale_factor, rescale_factor, 1)))
+    if max(X.shape[1:2])<300:
+        if rescale_factor is not None and rescale_factor != 1:
+            X = np.kron(X, np.ones((1, rescale_factor, rescale_factor, 1)))
 
-    def make_frame(i):
-        out = X[i]
-        return out
-
-    getframe = lambda t: make_frame(min(int(t * fps), len(X) - 1))
-    clip = mpy.VideoClip(getframe, duration=len(X) / fps)
-
+    clip = mpy.ImageSequenceClip(list(X), fps=fps)
+    # clip = mpy.VideoClip(getframe, duration=len(X) / fps)
     # outfile = os.path.abspath(os.path.expanduser(outfile))
     # if not os.path.isdir(os.path.dirname(outfile)):
     #     os.makedirs(os.path.dirname(outfile))
@@ -91,6 +93,7 @@ class GridRecorder(gym.core.Wrapper):
                 self.max_steps = self.default_max_steps + 1
         else:
             self.max_steps = max_steps + 1
+
     
     @staticmethod
     def fix_path(path):
@@ -119,6 +122,7 @@ class GridRecorder(gym.core.Wrapper):
             save_root = self.save_root
         if episode_id is None:
             episode_id = f'video_{self.reset_count}.mp4'
+        print("ok...")
         export_video(self.frames[:self.ptr],  os.path.join(self.fix_path(save_root), episode_id), **self.video_kwargs)
 
     def export_both(self, episode_id, save_root=None):
@@ -144,6 +148,7 @@ class GridRecorder(gym.core.Wrapper):
 
     def append_current_frame(self):
         if self.should_record:
+            # print(f"Adding frame {len(self.frames) if self.frames is not None else 0}")
             new_frame = self.env.render(mode="rgb_array", **self.render_kwargs)
             if isinstance(new_frame, list) or len(new_frame.shape)>3:
                 new_frame = new_frame[0]
@@ -151,6 +156,7 @@ class GridRecorder(gym.core.Wrapper):
                 self.frames = np.zeros(
                     (self.max_steps, *new_frame.shape), dtype=new_frame.dtype
                 )
+            # import pdb; pdb.set_trace()
             self.frames[self.ptr] = new_frame
             self.ptr += 1
 
